@@ -1,0 +1,344 @@
+[
+  {
+    "schemaname": "public",
+    "tablename": "domains",
+    "policyname": "Admins can manage domains",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "domains",
+    "policyname": "Anyone can read domains",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "domains",
+    "policyname": "Public can read domains",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "domains",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exam_categories",
+    "policyname": "Admins can manage exam categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exam_categories",
+    "policyname": "Anyone can read exam categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exam_categories",
+    "policyname": "Public can read exam_categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exam_categories",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exams",
+    "policyname": "Admins can manage exams",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exams",
+    "policyname": "Anyone can read exams",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exams",
+    "policyname": "Public can read exams",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "exams",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "resources",
+    "policyname": "Admins have full access to resources",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "resources",
+    "policyname": "Anyone can read approved resources",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "(is_approved = true)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "resources",
+    "policyname": "Authenticated users can submit resources",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null
+  },
+  {
+    "schemaname": "public",
+    "tablename": "resources",
+    "policyname": "Users can read their own submissions",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = submitted_by)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "resources",
+    "policyname": "Users can update their own pending submissions",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "((auth.uid() = submitted_by) AND (is_approved = false))"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skill_categories",
+    "policyname": "Admins can manage skill categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skill_categories",
+    "policyname": "Anyone can read skill categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skill_categories",
+    "policyname": "Public can read skill_categories",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skill_categories",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skills",
+    "policyname": "Admins can manage skills",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skills",
+    "policyname": "Anyone can read skills",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skills",
+    "policyname": "Public can read skills",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "skills",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "subjects",
+    "policyname": "Admins can manage subjects",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "subjects",
+    "policyname": "Anyone can read subjects",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "subjects",
+    "policyname": "Public can read subjects",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "subjects",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "universities",
+    "policyname": "Admins can manage universities",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "is_admin(auth.uid())"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "universities",
+    "policyname": "Anyone can read universities",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "universities",
+    "policyname": "Public can read universities",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "universities",
+    "policyname": "Public read access",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_profiles",
+    "policyname": "Public read basic profiles",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "SELECT",
+    "qual": "true"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_profiles",
+    "policyname": "Users manage own profile",
+    "permissive": "PERMISSIVE",
+    "roles": "{public}",
+    "cmd": "ALL",
+    "qual": "(auth.uid() = id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_resource_requests",
+    "policyname": "Users can manage own requests",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(auth.uid() = user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_saved_resources",
+    "policyname": "Users can manage own saves",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "ALL",
+    "qual": "(auth.uid() = user_id)"
+  },
+  {
+    "schemaname": "public",
+    "tablename": "user_submitted_resources",
+    "policyname": "Users can view own submissions",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "(auth.uid() = user_id)"
+  }
+]

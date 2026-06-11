@@ -1,0 +1,54 @@
+{
+  "name": "client",
+  "version": "0.1.0",
+  "private": true,
+  "homepage": "https://cachedinfo.gamingdronzz.com",
+  "proxy": "http://localhost:5000",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "server": "cd ../server && npm run server",
+    "server:start": "cd ../server && npm start",
+    "server:seed": "cd ../server && npm run seed",
+    "dev": "concurrently \"npm run server\" \"npm start\"",
+    "full:dev": "concurrently \"npm run server\" \"npm start\" \"cd ../server && npm run seed\""
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^5.18.0",
+    "@mui/material": "^5.18.0",
+    "@react-oauth/google": "^0.12.2",
+    "@supabase/supabase-js": "^2.53.0",
+    "axios": "^1.6.7",
+    "jwt-decode": "^3.1.2",
+    "lucide-react": "^0.536.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-router-dom": "6.28.0",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
