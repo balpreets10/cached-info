@@ -143,13 +143,15 @@ secrets/vars resolve, and gate on the `prepare` job's `deploy_staging` /
 
 1. **Checkout** (`actions/checkout@v4`).
 2. **Ship server code** via `burnett01/rsync-deployments` (same action the client uses)
-   to `/var/www/api-<env>/server/`, `--delete`, excluding `node_modules`, `.env*`,
+   to the per-env API app dir's `server/` (staging
+   `/var/www/staging.cachedinfo.gamingdronzz.com-api`, production
+   `/var/www/cachedinfo.gamingdronzz.com-api`), `--delete`, excluding `node_modules`, `.env*`,
    `.git`. (Reuses `DO_SSH_*` secrets.)
 3. **One `appleboy/ssh-action` step** (same action already used for the clean step),
    passing values via its `envs:` from `${{ secrets.* }}` / `${{ vars.* }}`, running on
    the droplet:
    - write `/etc/cinfo/api-<env>.env` (root, `chmod 600`) from the injected values;
-   - `cd /var/www/api-<env>/server && npm ci --omit=dev`;
+   - `cd <api-app-dir>/server && npm ci --omit=dev`;
    - `set -a; . /etc/cinfo/api-<env>.env; set +a` then `npm run migrate` (so
      `DATABASE_URL` is in the env for node-pg-migrate);
    - `pm2 startOrReload deploy/ecosystem.config.cjs --only cinfo-api-<env> --update-env`
@@ -169,7 +171,8 @@ secrets/vars resolve, and gate on the `prepare` job's `deploy_staging` /
 - Install **Node 20** and **PM2** (`npm i -g pm2`) on the droplet; run `pm2 startup`
   and follow its printed command so PM2 resurrects on reboot.
 - `mkdir -p /etc/cinfo` (root, `chmod 700`) — CI writes the per-env env files here.
-- Create `/var/www/api-staging` and `/var/www/api-production` owned by the deploy user.
+- Create `/var/www/staging.cachedinfo.gamingdronzz.com-api` and
+  `/var/www/cachedinfo.gamingdronzz.com-api` owned by the deploy user.
 - Grant the deploy user tightly-scoped passwordless `sudo` for **only** writing
   `/etc/cinfo/*` (e.g. via a helper) so the SSH step isn't full root. (PM2 runs as the
   deploy user, so no sudo needed for it.)
