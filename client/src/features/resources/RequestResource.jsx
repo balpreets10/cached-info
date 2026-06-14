@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '../auth/AuthContext';
+import SignInPrompt from '../auth/components/SignInPrompt';
 import { createRequest } from './requestsApi';
 import './RequestResource.css';
 
@@ -110,11 +111,7 @@ const RequestResource = () => {
           <p>Can't find what you're looking for? Let us know and we'll help you find it!</p>
         </div>
 
-        {!isAuthenticated && (
-          <div className="auth-warning">
-            <p>⚠️ Please login to submit requests</p>
-          </div>
-        )}
+        <SignInPrompt message="Sign in with Google to request a resource." />
 
         {submitSuccess && (
           <div className="success-message">

@@ -210,6 +210,16 @@
     border: 2px solid transparent;
 }
 
+/* The logged-out "Sign in with Google" CTA is a <button> (triggers OAuth
+   directly) but must match the sibling anchor .action-button items. */
+.homepage button.action-button {
+    width: 100%;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
 .homepage .action-button.primary {
     background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
     color: white;

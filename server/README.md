@@ -70,6 +70,20 @@ npm run server           # nodemon (auto-reload)
 - Docs: http://localhost:5000/api/docs
 - Health: `GET /api/health`, DB check: `GET /api/db-ping`
 
+## Deployment
+
+The API ships to the DigitalOcean droplet via `.github/workflows/deploy.yml` (jobs
+`deploy-server-{staging,production}`), running under **PM2** (one app per env:
+`cinfo-api-production` on `127.0.0.1:5000`, `cinfo-api-staging` on `127.0.0.1:5001`).
+
+Runtime secrets are **GitHub Environment** secrets/vars — not hand-placed on the box.
+Each deploy rewrites a root-owned `/etc/cinfo/api-<env>.env` (chmod 600) from them,
+which PM2 loads via `deploy/ecosystem.config.cjs`. Every deploy runs `npm run migrate`
+before the (re)start and a `/api/health` smoke check after.
+
+Full secret list, one-time droplet prep (PM2 + nginx + scoped sudo), and the seed step
+live in [`deploy/README.md`](../deploy/README.md).
+
 ## Database & migrations
 
 `DATABASE_URL` is loopback-only on the droplet. Local dev points at a local Postgres

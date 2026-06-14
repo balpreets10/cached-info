@@ -41,7 +41,7 @@ function buildSearchableTerms(universities = [], recent = []) {
 }
 
 const HomePage = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, signInWithGoogle } = useAuth();
 
   // Recent resources (first page, newest first as returned by the API).
   const { data: recentList } = useResources({ limit: 6 });
@@ -229,7 +229,21 @@ const HomePage = () => {
           </div>
 
           <div className="quick-actions">
-            <Link to="/submit" className="action-button primary">
+            {/* Logged-out visitors get a prominent sign-in CTA up top. */}
+            {!isAuthenticated && (
+              <button
+                type="button"
+                className="action-button primary"
+                onClick={signInWithGoogle}
+              >
+                <span className="action-icon">🔐</span>
+                Sign in with Google
+              </button>
+            )}
+            <Link
+              to="/submit"
+              className={`action-button ${isAuthenticated ? 'primary' : 'secondary'}`}
+            >
               <span className="action-icon">📤</span>
               Submit a Resource
             </Link>
