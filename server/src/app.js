@@ -8,6 +8,7 @@ import swaggerUi from 'swagger-ui-express';
 
 import config from './config.js';
 import swaggerSpec from './swagger.js';
+import passport from './auth/passport.js';
 import apiRouter from './routes/index.js';
 import notFound from './middleware/notFound.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -35,6 +36,7 @@ export function createApp() {
   app.use(compression());
   app.use(express.json());
   app.use(cookieParser());
+  app.use(passport.initialize());
   if (config.env !== 'test') {
     app.use(morgan(config.env === 'development' ? 'dev' : 'combined'));
   }
