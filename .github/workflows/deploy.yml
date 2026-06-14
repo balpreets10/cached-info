@@ -239,7 +239,7 @@ jobs:
         with:
           switches: -avz --delete --exclude=node_modules --exclude=.env* --exclude=.git
           path: server/
-          remote_path: /var/www/api-staging/server/
+          remote_path: /var/www/staging.cachedinfo.gamingdronzz.com-api/server/
           remote_host: ${{ secrets.DO_SSH_HOST }}
           remote_user: ${{ secrets.DO_SSH_USER }}
           remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
@@ -249,7 +249,7 @@ jobs:
         with:
           switches: -avz
           path: deploy/ecosystem.config.cjs
-          remote_path: /var/www/api-staging/deploy/
+          remote_path: /var/www/staging.cachedinfo.gamingdronzz.com-api/deploy/
           remote_host: ${{ secrets.DO_SSH_HOST }}
           remote_user: ${{ secrets.DO_SSH_USER }}
           remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
@@ -275,7 +275,7 @@ jobs:
           envs: NODE_ENV,PORT,CLIENT_ORIGIN,DATABASE_URL,JWT_ACCESS_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,BOOTSTRAP_ADMIN_EMAIL
           script: |
             set -euo pipefail
-            APP_DIR=/var/www/api-staging
+            APP_DIR=/var/www/staging.cachedinfo.gamingdronzz.com-api
             ENV_FILE=/etc/cinfo/api-staging.env
             PORT=5001
 
@@ -335,7 +335,7 @@ jobs:
         with:
           switches: -avz --delete --exclude=node_modules --exclude=.env* --exclude=.git
           path: server/
-          remote_path: /var/www/api-production/server/
+          remote_path: /var/www/cachedinfo.gamingdronzz.com-api/server/
           remote_host: ${{ secrets.DO_SSH_HOST }}
           remote_user: ${{ secrets.DO_SSH_USER }}
           remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
@@ -345,7 +345,7 @@ jobs:
         with:
           switches: -avz
           path: deploy/ecosystem.config.cjs
-          remote_path: /var/www/api-production/deploy/
+          remote_path: /var/www/cachedinfo.gamingdronzz.com-api/deploy/
           remote_host: ${{ secrets.DO_SSH_HOST }}
           remote_user: ${{ secrets.DO_SSH_USER }}
           remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
@@ -369,7 +369,7 @@ jobs:
           envs: NODE_ENV,PORT,CLIENT_ORIGIN,DATABASE_URL,JWT_ACCESS_SECRET,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_CALLBACK_URL,BOOTSTRAP_ADMIN_EMAIL
           script: |
             set -euo pipefail
-            APP_DIR=/var/www/api-production
+            APP_DIR=/var/www/cachedinfo.gamingdronzz.com-api
             ENV_FILE=/etc/cinfo/api-production.env
             PORT=5000
 

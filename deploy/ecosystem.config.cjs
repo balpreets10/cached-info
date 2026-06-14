@@ -42,8 +42,9 @@ function readEnvFile(file) {
   return out;
 }
 
-// server/ lives one level up from deploy/. App code is rsynced to
-// /var/www/api-<env>/server, and this config is run with cwd there.
+// server/ lives one level up from deploy/. App code is rsynced to the per-env
+// API app dir (/var/www/<site>-api/server), and this config is run with cwd
+// there. Paths here are relative (__dirname), so the app dir name doesn't matter.
 const serverEntry = path.resolve(__dirname, '..', 'server', 'src', 'index.js');
 
 function appFor(env, port) {

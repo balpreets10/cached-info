@@ -5,10 +5,10 @@ The Cached Info **API** is deployed by `.github/workflows/deploy.yml` (jobs
 Two API instances run on this one droplet under **PM2**, behind separate nginx
 server blocks:
 
-| Env        | PM2 app                 | Port (127.0.0.1) | App dir                  | Secret file                  |
-|------------|-------------------------|------------------|--------------------------|------------------------------|
-| production | `cinfo-api-production`  | 5000             | `/var/www/api-production`| `/etc/cinfo/api-production.env` |
-| staging    | `cinfo-api-staging`     | 5001             | `/var/www/api-staging`   | `/etc/cinfo/api-staging.env`    |
+| Env        | PM2 app                 | Port (127.0.0.1) | App dir                                              | Secret file                  |
+|------------|-------------------------|------------------|-----------------------------------------------------|------------------------------|
+| production | `cinfo-api-production`  | 5000             | `/var/www/cachedinfo.gamingdronzz.com-api`          | `/etc/cinfo/api-production.env` |
+| staging    | `cinfo-api-staging`     | 5001             | `/var/www/staging.cachedinfo.gamingdronzz.com-api`  | `/etc/cinfo/api-staging.env`    |
 
 ## Secret model — secrets live in GitHub, never hand-edited on the box
 
@@ -71,8 +71,8 @@ Run these once on the droplet as a sudo-capable admin.
 2. **Directories** — app dirs owned by the deploy user, secret dir root-only:
    ```bash
    sudo mkdir -p /etc/cinfo && sudo chmod 700 /etc/cinfo          # CI writes env files here
-   sudo mkdir -p /var/www/api-staging /var/www/api-production
-   sudo chown -R "$DEPLOY_USER":"$DEPLOY_USER" /var/www/api-staging /var/www/api-production
+   sudo mkdir -p /var/www/staging.cachedinfo.gamingdronzz.com-api /var/www/cachedinfo.gamingdronzz.com-api
+   sudo chown -R "$DEPLOY_USER":"$DEPLOY_USER" /var/www/staging.cachedinfo.gamingdronzz.com-api /var/www/cachedinfo.gamingdronzz.com-api
    ```
 
 3. **Scoped passwordless sudo for the deploy user.** The SSH deploy step needs root
@@ -105,7 +105,7 @@ Run these once on the droplet as a sudo-capable admin.
    once per env DB (grants `management` to `BOOTSTRAP_ADMIN_EMAIL` after that user has
    signed in once):
    ```bash
-   cd /var/www/api-staging/server
+   cd /var/www/staging.cachedinfo.gamingdronzz.com-api/server
    set -a; sudo cat /etc/cinfo/api-staging.env > /tmp/e && . /tmp/e && rm -f /tmp/e; set +a
    npm run seed
    ```
@@ -113,8 +113,10 @@ Run these once on the droplet as a sudo-capable admin.
 
 ## What each deploy does (automated)
 
-1. rsync `server/` → `/var/www/api-<env>/server` (excludes `node_modules`, `.env*`, `.git`).
-2. rsync `deploy/ecosystem.config.cjs` → `/var/www/api-<env>/deploy/`.
+1. rsync `server/` → the per-env API app dir's `server/` (staging:
+   `/var/www/staging.cachedinfo.gamingdronzz.com-api`; production:
+   `/var/www/cachedinfo.gamingdronzz.com-api`) — excludes `node_modules`, `.env*`, `.git`.
+2. rsync `deploy/ecosystem.config.cjs` → that same app dir's `deploy/`.
 3. Write `/etc/cinfo/api-<env>.env` (root, 600) from GitHub secrets/vars.
 4. `npm ci --omit=dev`.
 5. `npm run migrate` (with `DATABASE_URL` sourced from the env file).
