@@ -1,0 +1,78 @@
+.signin-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-left: 4px solid #f97316;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.signin-prompt-text {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.signin-prompt-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.signin-prompt-text p {
+  margin: 0;
+  color: #9a3412;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.signin-prompt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.6rem 1.1rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.signin-prompt-btn:hover {
+  border-color: #9ca3af;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+}
+
+.signin-prompt-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.signin-prompt-btn .google-icon {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .signin-prompt {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .signin-prompt-text {
+    justify-content: center;
+  }
+
+  .signin-prompt-btn {
+    justify-content: center;
+  }
+}
