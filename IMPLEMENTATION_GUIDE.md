@@ -1,284 +1,105 @@
-# 🚀 Implementation Guide: Enhanced Features
+# Implementation Guide
 
-This guide covers the implementation of three major features:
-1. **Google OAuth Integration with Role-Based Redirects**
-2. **Profile Management with Saved Resources**
-3. **Shareable Resource Cards with Link Generation**
+> **Note:** An earlier version of this file described a MongoDB/Mongoose backend with
+> a separate JWT setup. **That never matched the real project.** The backend is
+> **Express + PostgreSQL (raw `pg`, no ORM)**. This guide reflects what is actually
+> built. The authoritative, file-level plan lives at
+> `C:\Users\Balpreet\.claude\plans\i-want-to-prepare-vivid-lovelace.md`.
 
-## 📋 Prerequisites
+## Overview
 
-### 1. Install Dependencies
+Cached Info is being refactored so the **Express API owns authentication and all data**.
+The React client (currently still on Supabase) will talk only to the Express API. Work
+proceeds in phases on the `refactor/express-owned-auth-api` branch.
 
-**Frontend (client folder):**
-```bash
-cd client
-npm install @react-oauth/google
+- **Backend (Phases 0–3): complete and verified** — covered below.
+- **Frontend (Phases 4–6): pending** — see "Frontend integration (pending)".
+- **Deployment (Phase 7): pending.**
+
+## Architecture
+
+```
+React SPA (client/)  ──HTTPS──>  Express API (server/)  ──>  PostgreSQL 18
+   (CRA, MUI, React Query*)         (auth + all data)        (raw pg, no ORM)
+   * React Query + Express data layer land in the frontend cutover
 ```
 
-**Backend (server folder):**
-```bash
-cd server
-npm install
+- **Auth**: backend-driven Google OAuth via Passport. The API issues a short-lived JWT
+  **access token** (Bearer; carries role + permission claims) and an opaque **refresh
+  token** (httpOnly cookie, SHA-256-hashed in DB, rotated on each use).
+- **RBAC**: dedicated `roles` + `permissions` tables. Endpoints are gated on capability
+  strings (e.g. `resource:approve`, `catalog:manage`), single-sourced in
+  `server/src/auth/rbac.constants.js`. Two seeded roles: `student`, `management`.
+- **Layering**: `route → middleware (auth/permission/validate) → controller → service →
+  repository → db`. Repositories are the only place that run SQL.
+
+## Backend — what exists
+
+### Auth endpoints
 ```
-
-### 2. Environment Variables
-
-**Frontend (.env in client folder):**
-```env
-REACT_APP_GOOGLE_CLIENT_ID=your_google_client_id_here
-REACT_APP_API_URL=http://localhost:5000
+GET  /api/auth/google           Start Google OAuth (redirects to Google)
+GET  /api/auth/google/callback  Issues tokens, sets refresh cookie, redirects to SPA
+POST /api/auth/refresh          Rotate refresh cookie -> new access token
+POST /api/auth/logout           Revoke refresh token, clear cookie
+GET  /api/auth/me               Current user + roles + permissions (Bearer required)
 ```
+New sign-ins are created as `student`. The OAuth callback redirects the browser to
+`<CLIENT_URL>/auth/callback#access_token=<jwt>` — the SPA reads the token from the
+fragment and keeps it in memory.
 
-**Backend (.env in server folder):**
-```env
-MONGO_URI=mongodb://localhost:27017/cached-info
-JWT_SECRET=your_jwt_secret_here
-GOOGLE_CLIENT_ID=your_google_client_id_here
-CORS_ORIGIN=http://localhost:3000
+### Data endpoints (high level)
 ```
-
-## 🔐 1. Google OAuth Integration
-
-### Setup Google OAuth
-
-1. **Create Google OAuth Credentials:**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select existing one
-   - Enable Google+ API
-   - Create OAuth 2.0 credentials
-   - Add authorized origins: `http://localhost:3000`
-   - Add authorized redirect URIs: `http://localhost:3000`
-
-2. **Update App.jsx to include Google OAuth Provider:**
-```jsx
-import { GoogleOAuthProvider } from '@react-oauth/google';
-
-function App() {
-  return (
-    <GoogleOAuthProvider clientId={process.env.REACT_APP_GOOGLE_CLIENT_ID}>
-      {/* Your app components */}
-    </GoogleOAuthProvider>
-  );
-}
+Public read:   GET /api/catalog/:entity, /api/catalog/universities/tree
+               GET /api/resources (filter+paginate), /api/resources/:id
+               GET /api/search?q=
+Student:       POST /api/resources (pending), POST /api/requests
+               GET/POST/DELETE /api/me/saved-resources, GET /api/me/submissions
+Management:    POST/PATCH/DELETE /api/admin/catalog/:entity
+               PATCH /api/resources/:id/approval, GET /api/admin/resources/pending
+               GET /api/admin/users, PUT /api/admin/users/:id/roles
+               GET/PATCH /api/admin/requests
 ```
+Responses use `{ data }` (or `{ data, meta }` for paginated lists). Errors use
+`{ error: { code, message, details? } }`. Full live reference at `/api/docs`.
 
-### Features Implemented:
-- ✅ Role-based redirects (admin → admin dashboard, user → home)
-- ✅ Enhanced authentication context
-- ✅ Secure token management
-- ✅ User role verification
+### Database
+PostgreSQL 18, raw `pg`. `node-pg-migrate` migrations in `server/src/db/migrations/`
+create: the catalog (universities→domains→subjects, skill_categories→skills,
+exam_categories→exams), `resources` (attached to exactly one of subject/skill/exam, with
+`is_approved`), users + RBAC tables, user activity (saves/requests), and `refresh_tokens`.
+A `pg_trgm` GIN index powers the universal search bar.
 
-## 👤 2. Profile Management
+See `server/README.md` for setup, run, migrate, seed, and test commands.
 
-### Features Implemented:
-- ✅ User profile display with avatar
-- ✅ Saved resources management
-- ✅ Tabbed interface (Saved/Submitted resources)
-- ✅ Resource removal functionality
-- ✅ Responsive design
+## Frontend integration (pending)
 
-### Usage:
-1. **Access Profile:** Navigate to `/profile` when logged in
-2. **Save Resources:** Click heart icon on resource cards
-3. **View Saved:** See all saved resources in profile
-4. **Remove Resources:** Click remove button on saved resources
+The client still uses Supabase. The cutover (Phases 4–6) will:
 
-### API Endpoints:
-```
-GET    /api/users/saved-resources    - Get user's saved resources
-POST   /api/users/saved-resources    - Save a resource
-DELETE /api/users/saved-resources/:id - Remove saved resource
-GET    /api/users/profile            - Get user profile
-PUT    /api/users/profile            - Update user profile
-```
+1. **Foundation** — restructure `client/src` into feature folders; add an axios client
+   (attaches the access token; on 401 calls `/api/auth/refresh` once then retries) and a
+   React Query `QueryClientProvider`; add per-feature service modules.
+2. **Auth** — replace the Supabase `AuthContext` with a thin one backed by the Express
+   API: "Sign in with Google" → redirect to `GET /api/auth/google`; finish at a new
+   `/auth/callback` route; hydrate the user via `GET /api/auth/me`. Replace the
+   `userProfile.role === 'admin'` check with a permission check (e.g. `catalog:manage`)
+   for the admin dashboard route.
+3. **Data + Supabase removal** — swap all `DataContext` Supabase queries for React Query
+   hooks over the service modules (`useResources`, `useSearch`, `useCatalog`,
+   `useSavedResources`, admin mutations). Then delete `client/src/supabaseClient.js` and
+   remove `@supabase/supabase-js`.
 
-## 🔗 3. Shareable Resource Cards
+### Data migration (one-off, during cutover)
+`server/scripts/migrate-from-supabase.js` copies catalog rows, resources, and user
+profiles from Supabase into self-hosted Postgres (UUID-preserving, transactional,
+`--dry-run` supported). **Take a PG dump first** — this is the one hard-to-reverse step.
+It needs `@supabase/supabase-js` installed in `server/` temporarily
+(`npm i --no-save @supabase/supabase-js`) plus `SUPABASE_URL` / `SUPABASE_SERVICE_KEY`.
 
-### Features Implemented:
-- ✅ Share button on resource cards
-- ✅ Unique share link generation
-- ✅ Social media sharing (Twitter, Facebook, LinkedIn)
-- ✅ Copy to clipboard functionality
-- ✅ Share modal with multiple options
-- ✅ Shared resource viewing page
+## Prerequisites for full local testing
 
-### Usage:
-1. **Share Resource:** Click share button (📤) on any resource card
-2. **Copy Link:** Use copy button in share modal
-3. **Social Share:** Click social media buttons
-4. **View Shared:** Access shared resources via generated links
-
-### API Endpoints:
-```
-POST   /api/resources/share          - Create shareable link
-GET    /api/resources/shared/:shareId - Get shared resource
-```
-
-### Share Link Format:
-```
-http://localhost:3000/resource/{shareId}
-```
-
-## 🛠️ Setup Instructions
-
-### Step 1: Database Setup
-```bash
-cd server
-npm run seed
-```
-
-### Step 2: Start Backend
-```bash
-cd server
-npm run dev
-```
-
-### Step 3: Start Frontend
-```bash
-cd client
-npm start
-```
-
-### Step 4: Test Features
-
-1. **Test Google OAuth:**
-   - Go to login page
-   - Click "Login with Google"
-   - Verify role-based redirect
-
-2. **Test Profile Management:**
-   - Login as user
-   - Navigate to profile page
-   - Save some resources
-   - View saved resources
-
-3. **Test Shareable Resources:**
-   - Click share button on resource card
-   - Copy generated link
-   - Share on social media
-   - Test shared resource page
-
-## 📱 Component Usage
-
-### Using ShareableResourceCard:
-```jsx
-import ShareableResourceCard from './components/ShareableResourceCard';
-
-<ShareableResourceCard
-  resource={resourceData}
-  onSave={handleSave}
-  onRemove={handleRemove}
-  isSaved={isResourceSaved}
-/>
-```
-
-### Using Profile Component:
-```jsx
-import Profile from './components/Profile';
-
-// Add to your routes
-<Route path="/profile" element={<Profile />} />
-```
-
-### Using SharedResourcePage:
-```jsx
-import SharedResourcePage from './pages/SharedResourcePage';
-
-// Add to your routes
-<Route path="/resource/:shareId" element={<SharedResourcePage />} />
-```
-
-## 🔧 Configuration
-
-### Google OAuth Configuration:
-1. Update `REACT_APP_GOOGLE_CLIENT_ID` in frontend .env
-2. Update `GOOGLE_CLIENT_ID` in backend .env
-3. Ensure CORS is properly configured
-
-### Database Models:
-- **User Model:** Enhanced with `savedResources` array
-- **SharedResource Model:** New model for shareable links
-- **Resource Model:** Existing model with sharing capabilities
-
-### Security Features:
-- ✅ JWT token validation
-- ✅ Role-based access control
-- ✅ Resource ownership verification
-- ✅ Share link expiration (30 days)
-- ✅ Rate limiting protection
-
-## 🎨 Styling
-
-### CSS Files Added:
-- `Profile.css` - Profile page styling
-- `ShareableResourceCard.css` - Shareable card styling
-- `SharedResourcePage.css` - Shared resource page styling
-
-### Design Features:
-- ✅ Responsive design
-- ✅ Modern UI with gradients
-- ✅ Smooth animations
-- ✅ Mobile-friendly layout
-- ✅ Consistent color scheme
-
-## 🚨 Troubleshooting
-
-### Common Issues:
-
-1. **Google OAuth Not Working:**
-   - Check client ID in both frontend and backend .env files
-   - Verify authorized origins in Google Cloud Console
-   - Ensure CORS is properly configured
-
-2. **Saved Resources Not Loading:**
-   - Check if user is authenticated
-   - Verify API endpoints are working
-   - Check browser console for errors
-
-3. **Share Links Not Working:**
-   - Ensure backend is running
-   - Check if resource exists and is approved
-   - Verify share ID generation
-
-4. **Database Connection Issues:**
-   - Ensure MongoDB is running
-   - Check connection string in .env
-   - Run `npm run seed` to populate database
-
-### Debug Commands:
-```bash
-# Check backend logs
-cd server && npm run dev
-
-# Check frontend logs
-cd client && npm start
-
-# Test API endpoints
-curl http://localhost:5000/api/status
-```
-
-## 📈 Next Steps
-
-### Potential Enhancements:
-1. **Email Sharing:** Add email sharing functionality
-2. **QR Code Generation:** Generate QR codes for share links
-3. **Analytics:** Track share link usage and views
-4. **Bulk Operations:** Save/remove multiple resources at once
-5. **Export Features:** Export saved resources as PDF/CSV
-6. **Notifications:** Email notifications for new shared resources
-
-### Performance Optimizations:
-1. **Caching:** Implement Redis for session management
-2. **Pagination:** Add pagination for large resource lists
-3. **Image Optimization:** Optimize user avatars and images
-4. **Lazy Loading:** Implement lazy loading for resource cards
-
-## 📞 Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review browser console for errors
-3. Check server logs for backend issues
-4. Verify all environment variables are set correctly
-
-The implementation is now complete with all three major features working together seamlessly! 
+- A reachable Postgres in `DATABASE_URL` (local PG, or SSH tunnel to the droplet).
+- Run `npm run migrate:dev && npm run seed:dev` in `server/`.
+- For end-to-end login: real `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` in
+  `server/.env.development`, with `http://localhost:5000/api/auth/google/callback`
+  registered as an authorized redirect URI in Google Cloud Console. **Not configured
+  locally yet** — until then, login can't be smoke-tested end to end.
