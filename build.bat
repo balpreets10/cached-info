@@ -10,8 +10,9 @@ REM dev      -> client: npm start            server: NODE_ENV=development
 REM staging  -> client: npm run build:staging server: NODE_ENV=staging
 REM prod     -> client: npm run build         server: NODE_ENV=production
 REM
-REM Reminder: for dev, open the SSH tunnel first (local 5433 -> droplet 5432).
-REM See gamingdronzz_cachedinfo.md.
+REM Dev DB: uses the LOCAL Postgres on 127.0.0.1:5432 (see server\.env.development).
+REM Only open the SSH tunnel (local 5433 -> droplet 5432) if you want dev to point
+REM at the droplet DB instead. See gamingdronzz_cachedinfo.md.
 REM ===========================================================================
 setlocal
 
@@ -29,7 +30,7 @@ set "SERVER=%ROOT%server"
 
 if /i "%ENVARG%"=="dev" (
   echo [build] Starting DEV: live client dev server + API ^(NODE_ENV=development^)
-  echo [build] Make sure the SSH tunnel is open ^(local 5433 -^> droplet 5432^).
+  echo [build] Using LOCAL Postgres on 127.0.0.1:5432 ^(see server\.env.development^).
   pushd "%CLIENT%"
   call npx concurrently "cd /d %SERVER% && npm run start:dev" "npm start"
   popd
