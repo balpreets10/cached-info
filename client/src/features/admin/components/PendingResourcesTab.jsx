@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
     Search,
-    Filter,
     Check,
     X,
     Eye,
@@ -87,29 +86,35 @@ const PendingResourcesTab = ({
                                 )}
 
                                 <div className="resource-tags">
-                                    {resource.subjects && (
-                                        <>
-                                            <span className="resource-tag subject">
-                                                📚 {resource.subjects.name}
-                                            </span>
-                                            {resource.subjects.domains && (
-                                                <span className="resource-tag domain">
-                                                    🎯 {resource.subjects.domains.name}
-                                                </span>
-                                            )}
-                                            {resource.subjects.domains?.universities && (
-                                                <span className="resource-tag university">
-                                                    🏫 {resource.subjects.domains.universities.name}
-                                                </span>
-                                            )}
-                                        </>
+                                    {resource.subject && (
+                                        <span className="resource-tag subject">
+                                            📚 {resource.subject.name}
+                                        </span>
+                                    )}
+                                    {resource.domain && (
+                                        <span className="resource-tag domain">
+                                            🎯 {resource.domain.name}
+                                        </span>
+                                    )}
+                                    {resource.university && (
+                                        <span className="resource-tag university">
+                                            🏫 {resource.university.name}
+                                        </span>
+                                    )}
+                                    {resource.skill && (
+                                        <span className="resource-tag subject">
+                                            💻 {resource.skill.name}
+                                        </span>
+                                    )}
+                                    {resource.exam && (
+                                        <span className="resource-tag subject">
+                                            📝 {resource.exam.name}
+                                        </span>
                                     )}
                                 </div>
 
                                 <div className="resource-meta">
-                                    <span>Submitted by {resource.user_profiles?.full_name || 'Anonymous'}</span>
-                                    <span>•</span>
-                                    <span>{new Date(resource.created_at).toLocaleDateString()}</span>
+                                    <span>{resource.dateAdded ? new Date(resource.dateAdded).toLocaleDateString() : ''}</span>
                                 </div>
                             </div>
 

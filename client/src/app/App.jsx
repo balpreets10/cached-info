@@ -19,11 +19,6 @@ import { PERMISSIONS } from '../shared/lib/permissions';
 // Shared UI
 import Header from '../shared/components/Header';
 
-// NOTE: DataContext (Supabase) is kept alive ONLY until the Phase 6 data
-// cutover. Pages still read from it; they get ported to React Query hooks and
-// this provider is deleted in Phase 6.
-import { DataProvider } from '../context/DataContext';
-
 /**
  * Application shell + routing. Server state now lives in React Query (per-page
  * hooks), so there's no global data-loading gate here anymore — each page shows
@@ -81,10 +76,6 @@ const AppContent = () => {
   );
 };
 
-const App = () => (
-  <DataProvider>
-    <AppContent />
-  </DataProvider>
-);
+const App = () => <AppContent />;
 
 export default App;

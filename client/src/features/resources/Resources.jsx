@@ -1,538 +1,300 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../auth/AuthContext';
-import { useData } from '../../context/DataContext';
+import {
+  useResources,
+  useSavedResources,
+  useSaveResource,
+  useUnsaveResource,
+} from './hooks/useResources';
+import { useUniversitiesTree } from '../catalog/hooks/useCatalog';
 import './Resources.css';
 
+const PAGE_SIZE = 12;
+
 const Resources = () => {
-    const { user } = useAuth();
-    const { universities, allResources, loading, error } = useData();
+  const { isAuthenticated } = useAuth();
+  const { data: universities = [] } = useUniversitiesTree();
 
-    // Filter states
-    const [filters, setFilters] = useState({
-        domain: '',
-        university: '',
-        subject: ''
+  const [filters, setFilters] = useState({ university: '', domain: '' });
+  const [page, setPage] = useState(1);
+
+  // Saved resources (logged-in only).
+  const { data: saved = [] } = useSavedResources(isAuthenticated);
+  const savedIds = useMemo(() => new Set(saved.map((r) => r.id)), [saved]);
+  const saveResource = useSaveResource();
+  const unsaveResource = useUnsaveResource();
+
+  // Server-side filtering + pagination via the API.
+  const params = {
+    page,
+    limit: PAGE_SIZE,
+    ...(filters.university && { universityId: filters.university }),
+    ...(filters.domain && { domainId: filters.domain }),
+  };
+  const { data: result, isLoading, error } = useResources(params);
+  const resources = result?.data ?? [];
+  const meta = result?.meta;
+  const totalPages = meta?.totalPages ?? 1;
+
+  // Domain options derive from the selected university's tree.
+  const domainOptions = useMemo(() => {
+    if (!filters.university) {
+      // All domains across all universities.
+      return universities.flatMap((u) =>
+        (u.domains || []).map((d) => ({ _id: d.id, name: d.name })),
+      );
+    }
+    const uni = universities.find((u) => u.id === filters.university);
+    return (uni?.domains || []).map((d) => ({ _id: d.id, name: d.name }));
+  }, [universities, filters.university]);
+
+  // Modal
+  const [selectedResource, setSelectedResource] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+
+  const handleFilterChange = (key, value) => {
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value };
+      // Reset domain when university changes.
+      if (key === 'university') next.domain = '';
+      return next;
     });
+    setPage(1);
+  };
 
-    // Data states
-    const [domains, setDomains] = useState([]);
-    const [subjects, setSubjects] = useState([]);
-    const [filteredResources, setFilteredResources] = useState([]);
+  const clearFilters = () => {
+    setFilters({ university: '', domain: '' });
+    setPage(1);
+  };
 
-    // Pagination states
-    const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage] = useState(12);
+  const toggleSave = (resource) => {
+    if (!isAuthenticated) {
+      alert('Please login to save resources');
+      return;
+    }
+    if (savedIds.has(resource.id)) {
+      unsaveResource.mutate(resource.id);
+    } else {
+      saveResource.mutate(resource.id);
+    }
+  };
 
-    // Modal states
-    const [selectedResource, setSelectedResource] = useState(null);
-    const [showModal, setShowModal] = useState(false);
+  const handleResourceClick = (resource) => {
+    setSelectedResource(resource);
+    setShowModal(true);
+  };
 
-    // Extract unique domains and subjects from universities data
-    const extractFilterOptions = () => {
-        const uniqueDomains = [];
-        const uniqueSubjects = [];
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedResource(null);
+  };
 
-        universities.forEach(university => {
-            university.domains.forEach(domain => {
-                // Add domain if not already added
-                if (!uniqueDomains.find(d => d._id === domain._id)) {
-                    uniqueDomains.push({
-                        _id: domain._id,
-                        name: domain.name
-                    });
-                }
+  const handlePageChange = (next) => {
+    setPage(next);
+    document.querySelector('.content-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
-                domain.subjects.forEach(subject => {
-                    // Add subject if not already added
-                    if (!uniqueSubjects.find(s => s._id === subject._id)) {
-                        uniqueSubjects.push({
-                            _id: subject._id,
-                            name: subject.name,
-                            domainId: domain._id,
-                            universityId: university._id
-                        });
-                    }
-                });
-            });
-        });
+  const renderUniversityDropdown = () => (
+    <div className="filter-dropdown">
+      <label>University</label>
+      <select
+        value={filters.university}
+        onChange={(e) => handleFilterChange('university', e.target.value)}
+      >
+        <option value="">Select University</option>
+        {universities.map((u) => (
+          <option key={u.id} value={u.id}>{u.name}</option>
+        ))}
+      </select>
+    </div>
+  );
 
-        return { uniqueDomains, uniqueSubjects };
-    };
+  const renderDomainDropdown = () => (
+    <div className="filter-dropdown">
+      <label>Domain</label>
+      <select
+        value={filters.domain}
+        onChange={(e) => handleFilterChange('domain', e.target.value)}
+      >
+        <option value="">Select Domain</option>
+        {domainOptions.map((d) => (
+          <option key={d._id} value={d._id}>{d.name}</option>
+        ))}
+      </select>
+    </div>
+  );
 
-    // Filter resources based on current filters
-    const filterResources = (resources, currentFilters) => {
-        return resources.filter(resource => {
-            if (currentFilters.university && resource.university._id !== currentFilters.university) {
-                return false;
-            }
-            if (currentFilters.domain && resource.domain._id !== currentFilters.domain) {
-                return false;
-            }
-            if (currentFilters.subject && resource.subject._id !== currentFilters.subject) {
-                return false;
-            }
-            return true;
-        });
-    };
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
 
-    // Calculate pagination values
-    const totalPages = Math.ceil(filteredResources.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const currentResources = filteredResources.slice(startIndex, endIndex);
-
-    // Load data when universities change
-    useEffect(() => {
-        const extractAndSetOptions = () => {
-            const uniqueDomains = [];
-            const uniqueSubjects = [];
-
-            universities.forEach(university => {
-                university.domains.forEach(domain => {
-                    // Add domain if not already added
-                    if (!uniqueDomains.find(d => d._id === domain._id)) {
-                        uniqueDomains.push({
-                            _id: domain._id,
-                            name: domain.name
-                        });
-                    }
-
-                    domain.subjects.forEach(subject => {
-                        // Add subject if not already added
-                        if (!uniqueSubjects.find(s => s._id === subject._id)) {
-                            uniqueSubjects.push({
-                                _id: subject._id,
-                                name: subject.name,
-                                domainId: domain._id,
-                                universityId: university._id
-                            });
-                        }
-                    });
-                });
-            });
-
-            setDomains(uniqueDomains);
-            setSubjects(uniqueSubjects);
-        };
-
-        if (universities.length > 0) {
-            extractAndSetOptions();
-            setFilteredResources(allResources);
-        }
-    }, [universities, allResources]);
-
-    // Update filtered data when filters change
-    useEffect(() => {
-        const filtered = filterResources(allResources, filters);
-        setFilteredResources(filtered);
-        setCurrentPage(1); // Reset to first page when filters change
-    }, [filters, allResources]);
-
-    const handleFilterChange = (filterType, value) => {
-        setFilters(prev => ({
-            ...prev,
-            [filterType]: value
-        }));
-    };
-
-    const clearFilters = () => {
-        setFilters({
-            domain: '',
-            university: '',
-            subject: ''
-        });
-        setFilteredResources(allResources);
-        setCurrentPage(1);
-    };
-
-    const handlePageChange = (page) => {
-        setCurrentPage(page);
-        // Scroll to top of resources section
-        document.querySelector('.content-section')?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
-    };
-
-    const handleResourceClick = (resource) => {
-        setSelectedResource(resource);
-        setShowModal(true);
-    };
-
-    const closeModal = () => {
-        setShowModal(false);
-        setSelectedResource(null);
-    };
-
-    const handleSaveResource = (resourceId) => {
-        if (!user) {
-            alert('Please login to save resources');
-            return;
-        }
-
-        // Get existing saved resources from localStorage
-        const savedResources = JSON.parse(localStorage.getItem('savedResources') || '[]');
-
-        if (!savedResources.includes(resourceId)) {
-            savedResources.push(resourceId);
-            localStorage.setItem('savedResources', JSON.stringify(savedResources));
-            alert('Resource saved successfully!');
-        } else {
-            alert('Resource already saved!');
-        }
-    };
-
-    const renderDropdown = (label, options, filterKey, valueField = '_id', labelField = 'name') => (
-        <div className="filter-dropdown">
-            <label>{label}</label>
-            <select
-                value={filters[filterKey]}
-                onChange={(e) => handleFilterChange(filterKey, e.target.value)}
-            >
-                <option value="">Select {label}</option>
-                {options.map(option => (
-                    <option key={option[valueField]} value={option[valueField]}>
-                        {option[labelField]}
-                    </option>
-                ))}
-            </select>
-        </div>
-    );
-
-    const renderPagination = () => {
-        if (totalPages <= 1) return null;
-
-        const pageNumbers = [];
-        const maxVisiblePages = 5;
-
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-        if (endPage - startPage < maxVisiblePages - 1) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            pageNumbers.push(i);
-        }
-
-        return (
-            <div className="pagination">
-                <button
-                    className="pagination-btn"
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                >
-                    ‹ Previous
-                </button>
-
-                {startPage > 1 && (
-                    <>
-                        <button
-                            className="pagination-btn"
-                            onClick={() => handlePageChange(1)}
-                        >
-                            1
-                        </button>
-                        {startPage > 2 && <span className="pagination-dots">...</span>}
-                    </>
-                )}
-
-                {pageNumbers.map(page => (
-                    <button
-                        key={page}
-                        className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
-                        onClick={() => handlePageChange(page)}
-                    >
-                        {page}
-                    </button>
-                ))}
-
-                {endPage < totalPages && (
-                    <>
-                        {endPage < totalPages - 1 && <span className="pagination-dots">...</span>}
-                        <button
-                            className="pagination-btn"
-                            onClick={() => handlePageChange(totalPages)}
-                        >
-                            {totalPages}
-                        </button>
-                    </>
-                )}
-
-                <button
-                    className="pagination-btn"
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                >
-                    Next ›
-                </button>
-            </div>
-        );
-    };
-
-    const renderResources = () => {
-        if (loading) {
-            return <div className="loading">Loading resources...</div>;
-        }
-
-        if (error) {
-            return <div className="error">Error loading resources: {error}</div>;
-        }
-
-        if (filteredResources.length === 0) {
-            return <p className="no-data">No resources found. Please adjust filters above.</p>;
-        }
-
-        const startItem = startIndex + 1;
-        const endItem = Math.min(endIndex, filteredResources.length);
-
-        return (
-            <>
-                <div className="resources-info">
-                    <p>Showing {startItem}-{endItem} of {filteredResources.length} resources</p>
-                </div>
-
-                <div className="resources-grid">
-                    {currentResources.map(resource => (
-                        <div
-                            key={resource._id}
-                            className="resource-card"
-                            onClick={() => handleResourceClick(resource)}
-                        >
-                            <div className="card-header">
-                                <div className="resource-type-badge">
-                                    {resource.type}
-                                </div>
-                                <div className="card-actions">
-                                    {user && (
-                                        <button
-                                            className="save-btn"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleSaveResource(resource._id);
-                                            }}
-                                            title="Save resource"
-                                        >
-                                            🤍
-                                        </button>
-                                    )}
-                                    <button
-                                        className="share-btn"
-                                        disabled
-                                        title="Share resource (coming soon)"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        📤
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="card-content">
-                                <h4 className="resource-title">{resource.title}</h4>
-                                <p className="resource-description">{resource.description}</p>
-
-                                <div className="resource-meta">
-                                    <span className="meta-item">
-                                        🏫 {resource.university.name}
-                                    </span>
-                                    <span className="meta-item">
-                                        📚 {resource.domain.name}
-                                    </span>
-                                    <span className="meta-item">
-                                        📖 {resource.subject.name}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {renderPagination()}
-            </>
-        );
-    };
+    const pageNumbers = [];
+    const maxVisible = 5;
+    let start = Math.max(1, page - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    if (end - start < maxVisible - 1) start = Math.max(1, end - maxVisible + 1);
+    for (let i = start; i <= end; i++) pageNumbers.push(i);
 
     return (
-        <div className="resources-container">
-            <div className="resources-header">
-                <h1>Learning Resources</h1>
-                <p>Find resources tailored to your academic needs</p>
-            </div>
-
-            {/* Filters Section */}
-            <div className="filters-section">
-                <h2>Filter Resources</h2>
-                <div className="filters-grid">
-                    {renderDropdown('University', universities, 'university')}
-                    {renderDropdown('Domain', domains, 'domain')}
-                </div>
-                <button onClick={clearFilters} className="clear-filters-btn">
-                    Clear All Filters
-                </button>
-            </div>
-
-            {/* Resources Section */}
-            <section className="content-section">
-                <h2>Available Resources</h2>
-                {renderResources()}
-            </section>
-
-            {/* Modal */}
-            {showModal && selectedResource && (
-                <div className="modal-overlay" onClick={closeModal}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>{selectedResource.title}</h3>
-                            <button className="close-btn" onClick={closeModal}>×</button>
-                        </div>
-
-                        <div className="modal-body">
-                            <div className="resource-details">
-                                <div className="detail-item">
-                                    <strong>University:</strong> {selectedResource.university.name}
-                                </div>
-                                <div className="detail-item">
-                                    <strong>Domain:</strong> {selectedResource.domain.name}
-                                </div>
-                                <div className="detail-item">
-                                    <strong>Subject:</strong> {selectedResource.subject.name}
-                                </div>
-                                <div className="detail-item">
-                                    <strong>Type:</strong> {selectedResource.type}
-                                </div>
-                            </div>
-
-                            <div className="description-section">
-                                <h4>Description:</h4>
-                                <p>{selectedResource.description}</p>
-                            </div>
-                        </div>
-
-                        <div className="modal-footer">
-                            <button
-                                className="save-resource-btn"
-                                onClick={() => handleSaveResource(selectedResource._id)}
-                                disabled={!user}
-                            >
-                                {user ? 'Save Resource' : 'Login to Save'}
-                            </button>
-                            <a
-                                href={selectedResource.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="save-resource-btn"
-                                style={{
-                                    background: '#007bff',
-                                    textDecoration: 'none',
-                                    display: 'inline-block',
-                                    textAlign: 'center'
-                                }}
-                            >
-                                Visit Resource
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
+      <div className="pagination">
+        <button className="pagination-btn" onClick={() => handlePageChange(page - 1)} disabled={page === 1}>
+          ‹ Previous
+        </button>
+        {pageNumbers.map((p) => (
+          <button
+            key={p}
+            className={`pagination-btn ${page === p ? 'active' : ''}`}
+            onClick={() => handlePageChange(p)}
+          >
+            {p}
+          </button>
+        ))}
+        <button className="pagination-btn" onClick={() => handlePageChange(page + 1)} disabled={page === totalPages}>
+          Next ›
+        </button>
+      </div>
     );
+  };
+
+  const renderResources = () => {
+    if (isLoading) return <div className="loading">Loading resources...</div>;
+    if (error) return <div className="error">Error loading resources. Please try again.</div>;
+    if (resources.length === 0) {
+      return <p className="no-data">No resources found. Please adjust filters above.</p>;
+    }
+
+    return (
+      <>
+        {meta && (
+          <div className="resources-info">
+            <p>{meta.total} resource{meta.total === 1 ? '' : 's'} found</p>
+          </div>
+        )}
+
+        <div className="resources-grid">
+          {resources.map((resource) => (
+            <div
+              key={resource.id}
+              className="resource-card"
+              onClick={() => handleResourceClick(resource)}
+            >
+              <div className="card-header">
+                <div className="resource-type-badge">{resource.type}</div>
+                <div className="card-actions">
+                  {isAuthenticated && (
+                    <button
+                      className="save-btn"
+                      onClick={(e) => { e.stopPropagation(); toggleSave(resource); }}
+                      title={savedIds.has(resource.id) ? 'Remove from saved' : 'Save resource'}
+                    >
+                      {savedIds.has(resource.id) ? '❤️' : '🤍'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="card-content">
+                <h4 className="resource-title">{resource.title}</h4>
+                <p className="resource-description">{resource.description}</p>
+
+                <div className="resource-meta">
+                  {resource.university && <span className="meta-item">🏫 {resource.university.name}</span>}
+                  {resource.domain && <span className="meta-item">📚 {resource.domain.name}</span>}
+                  {resource.subject && <span className="meta-item">📖 {resource.subject.name}</span>}
+                  {resource.skill && <span className="meta-item">💻 {resource.skill.name}</span>}
+                  {resource.exam && <span className="meta-item">📝 {resource.exam.name}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {renderPagination()}
+      </>
+    );
+  };
+
+  return (
+    <div className="resources-container">
+      <div className="resources-header">
+        <h1>Learning Resources</h1>
+        <p>Find resources tailored to your academic needs</p>
+      </div>
+
+      <div className="filters-section">
+        <h2>Filter Resources</h2>
+        <div className="filters-grid">
+          {renderUniversityDropdown()}
+          {renderDomainDropdown()}
+        </div>
+        <button onClick={clearFilters} className="clear-filters-btn">Clear All Filters</button>
+      </div>
+
+      <section className="content-section">
+        <h2>Available Resources</h2>
+        {renderResources()}
+      </section>
+
+      {showModal && selectedResource && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{selectedResource.title}</h3>
+              <button className="close-btn" onClick={closeModal}>×</button>
+            </div>
+
+            <div className="modal-body">
+              <div className="resource-details">
+                {selectedResource.university && (
+                  <div className="detail-item"><strong>University:</strong> {selectedResource.university.name}</div>
+                )}
+                {selectedResource.domain && (
+                  <div className="detail-item"><strong>Domain:</strong> {selectedResource.domain.name}</div>
+                )}
+                {selectedResource.subject && (
+                  <div className="detail-item"><strong>Subject:</strong> {selectedResource.subject.name}</div>
+                )}
+                {selectedResource.skill && (
+                  <div className="detail-item"><strong>Skill:</strong> {selectedResource.skill.name}</div>
+                )}
+                {selectedResource.exam && (
+                  <div className="detail-item"><strong>Exam:</strong> {selectedResource.exam.name}</div>
+                )}
+                <div className="detail-item"><strong>Type:</strong> {selectedResource.type}</div>
+              </div>
+
+              <div className="description-section">
+                <h4>Description:</h4>
+                <p>{selectedResource.description}</p>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                className="save-resource-btn"
+                onClick={() => toggleSave(selectedResource)}
+                disabled={!isAuthenticated}
+              >
+                {!isAuthenticated
+                  ? 'Login to Save'
+                  : savedIds.has(selectedResource.id)
+                    ? 'Remove from Saved'
+                    : 'Save Resource'}
+              </button>
+              <a
+                href={selectedResource.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="save-resource-btn"
+                style={{ background: '#007bff', textDecoration: 'none', display: 'inline-block', textAlign: 'center' }}
+              >
+                Visit Resource
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default Resources;
-
-/* Additional CSS for pagination - add this to your Resources.css file */
-/*
-.resources-info {
-    margin-bottom: 1.5rem;
-    color: #666;
-    font-size: 0.95rem;
-    text-align: center;
-}
-
-.pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 2rem 0;
-    padding: 1rem;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.pagination-btn {
-    padding: 0.5rem 0.75rem;
-    border: 1px solid #ddd;
-    background: white;
-    color: #333;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: all 0.3s;
-    min-width: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.pagination-btn:hover:not(:disabled) {
-    background: #f8f9fa;
-    border-color: #007bff;
-    transform: translateY(-1px);
-}
-
-.pagination-btn.active {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
-}
-
-.pagination-btn:disabled {
-    background: #f8f9fa;
-    color: #ccc;
-    cursor: not-allowed;
-    border-color: #e9ecef;
-}
-
-.pagination-dots {
-    padding: 0 0.5rem;
-    color: #666;
-    font-weight: bold;
-}
-
-@media (max-width: 768px) {
-    .pagination {
-        gap: 0.25rem;
-        padding: 0.75rem;
-        margin: 1.5rem 0;
-    }
-    
-    .pagination-btn {
-        padding: 0.4rem 0.6rem;
-        font-size: 0.9rem;
-        min-width: 40px;
-    }
-    
-    .resources-info {
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .pagination {
-        gap: 0.2rem;
-        padding: 0.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .pagination-btn {
-        padding: 0.3rem 0.5rem;
-        font-size: 0.8rem;
-        min-width: 36px;
-    }
-}
-*/

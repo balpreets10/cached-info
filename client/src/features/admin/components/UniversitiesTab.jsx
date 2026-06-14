@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../supabaseClient';
+import { useUniversitiesTree } from '../../catalog/hooks/useCatalog';
+import {
+    useCreateCatalogItem,
+    useUpdateCatalogItem,
+    useDeleteCatalogItem,
+} from '../hooks/useAdmin';
 import {
     Plus,
     Search,
@@ -10,115 +15,73 @@ import {
     X
 } from 'lucide-react';
 
+const ENTITY = 'universities';
+
+/** Catalog management for universities (create/edit/delete via /api/admin/catalog). */
 const UniversitiesTab = () => {
-    const [universities, setUniversities] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { data: universities = [], isLoading } = useUniversitiesTree();
+    const createItem = useCreateCatalogItem();
+    const updateItem = useUpdateCatalogItem();
+    const deleteItem = useDeleteCatalogItem();
+
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddForm, setShowAddForm] = useState(false);
-    const [editingUniversity, setEditingUniversity] = useState(null);
+    const [editing, setEditing] = useState(null);
+    const [formData, setFormData] = useState({ name: '' });
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    const [formData, setFormData] = useState({
-        name: ''
-    });
-
     useEffect(() => {
-        fetchUniversities();
-    }, []);
-
-    const fetchUniversities = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('universities')
-                .select(`
-                    *,
-                    domains (
-                        id,
-                        name,
-                        subjects (id, name)
-                    )
-                `)
-                .order('name');
-
-            if (error) throw error;
-            setUniversities(data || []);
-        } catch (err) {
-            setError('Failed to fetch universities');
-            console.error(err);
-        } finally {
-            setLoading(false);
+        if (success || error) {
+            const timer = setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+            return () => clearTimeout(timer);
         }
+    }, [success, error]);
+
+    const closeForm = () => {
+        setShowAddForm(false);
+        setEditing(null);
+        setFormData({ name: '' });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const body = { name: formData.name.trim() };
         try {
-            const universityData = {
-                name: formData.name.trim(),
-                updated_at: new Date().toISOString()
-            };
-
-            let result;
-            if (editingUniversity) {
-                result = await supabase
-                    .from('universities')
-                    .update(universityData)
-                    .eq('id', editingUniversity.id);
+            if (editing) {
+                await updateItem.mutateAsync({ entity: ENTITY, id: editing.id, body });
+                setSuccess('University updated successfully');
             } else {
-                universityData.created_at = new Date().toISOString();
-                result = await supabase
-                    .from('universities')
-                    .insert([universityData]);
+                await createItem.mutateAsync({ entity: ENTITY, body });
+                setSuccess('University added successfully');
             }
-
-            if (result.error) throw result.error;
-
-            setSuccess(editingUniversity ? 'University updated successfully' : 'University added successfully');
-            setShowAddForm(false);
-            setEditingUniversity(null);
-            setFormData({ name: '' });
-            fetchUniversities();
+            closeForm();
         } catch (err) {
-            setError('Failed to save university');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to save university');
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this university? This will also delete all associated domains and subjects.')) {
-            return;
-        }
-
+        if (!window.confirm('Delete this university? Associated domains/subjects may be removed too.')) return;
         try {
-            const { error } = await supabase
-                .from('universities')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await deleteItem.mutateAsync({ entity: ENTITY, id });
             setSuccess('University deleted successfully');
-            fetchUniversities();
         } catch (err) {
-            setError('Failed to delete university');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to delete university');
         }
     };
 
     const handleEdit = (university) => {
-        setEditingUniversity(university);
-        setFormData({
-            name: university.name
-        });
+        setEditing(university);
+        setFormData({ name: university.name });
         setShowAddForm(true);
     };
 
-    const filteredUniversities = universities.filter(university =>
-        !searchTerm ||
-        university.name.toLowerCase().includes(searchTerm.toLowerCase())
+    const filtered = universities.filter((u) =>
+        !searchTerm || u.name.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="loading-container">
                 <div className="loading-spinner"></div>
@@ -129,7 +92,6 @@ const UniversitiesTab = () => {
 
     return (
         <div className="universities-tab">
-            {/* Header */}
             <div className="page-header">
                 <div className="page-header-content">
                     <div className="page-header-text">
@@ -147,10 +109,7 @@ const UniversitiesTab = () => {
                                 className="search-input"
                             />
                         </div>
-                        <button
-                            onClick={() => setShowAddForm(true)}
-                            className="btn btn-primary"
-                        >
+                        <button onClick={() => setShowAddForm(true)} className="btn btn-primary">
                             <Plus size={16} />
                             Add University
                         </button>
@@ -158,36 +117,15 @@ const UniversitiesTab = () => {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
-            {success && (
-                <div className="notification success">
-                    <Check size={16} />
-                    {success}
-                </div>
-            )}
-            {error && (
-                <div className="notification error">
-                    <X size={16} />
-                    {error}
-                </div>
-            )}
+            {success && <div className="notification success"><Check size={16} />{success}</div>}
+            {error && <div className="notification error"><X size={16} />{error}</div>}
 
-            {/* Add/Edit Form Modal */}
             {showAddForm && (
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <div className="modal-header">
-                            <h3>{editingUniversity ? 'Edit University' : 'Add New University'}</h3>
-                            <button
-                                onClick={() => {
-                                    setShowAddForm(false);
-                                    setEditingUniversity(null);
-                                    setFormData({ name: '' });
-                                }}
-                                className="modal-close"
-                            >
-                                <X size={20} />
-                            </button>
+                            <h3>{editing ? 'Edit University' : 'Add New University'}</h3>
+                            <button onClick={closeForm} className="modal-close"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
@@ -196,26 +134,17 @@ const UniversitiesTab = () => {
                                     type="text"
                                     id="name"
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={(e) => setFormData({ name: e.target.value })}
                                     required
                                     className="form-input"
                                     placeholder="Enter university name"
                                 />
                             </div>
-
                             <div className="form-actions">
                                 <button type="submit" className="btn btn-primary">
-                                    {editingUniversity ? 'Update University' : 'Add University'}
+                                    {editing ? 'Update University' : 'Add University'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowAddForm(false);
-                                        setEditingUniversity(null);
-                                        setFormData({ name: '' });
-                                    }}
-                                    className="btn btn-secondary"
-                                >
+                                <button type="button" onClick={closeForm} className="btn btn-secondary">
                                     Cancel
                                 </button>
                             </div>
@@ -224,9 +153,8 @@ const UniversitiesTab = () => {
                 </div>
             )}
 
-            {/* Universities List */}
             <div className="universities-list">
-                {filteredUniversities.map((university) => (
+                {filtered.map((university) => (
                     <div key={university.id} className="university-card">
                         <div className="university-content">
                             <div className="university-info">
@@ -240,46 +168,28 @@ const UniversitiesTab = () => {
                                         <span className="stat-label">Domains:</span>
                                         <span className="stat-value">{university.domains?.length || 0}</span>
                                     </div>
-                                    <div className="stat-item">
-                                        <span className="stat-label">Subjects:</span>
-                                        <span className="stat-value">
-                                            {university.domains?.reduce((total, domain) =>
-                                                total + (domain.subjects?.length || 0), 0
-                                            ) || 0}
-                                        </span>
-                                    </div>
                                 </div>
 
-                                {university.domains && university.domains.length > 0 && (
+                                {university.domains?.length > 0 && (
                                     <div className="university-domains">
                                         <h4>Domains:</h4>
                                         <div className="domains-list">
-                                            {university.domains.map(domain => (
+                                            {university.domains.map((domain) => (
                                                 <span key={domain.id} className="domain-tag">
-                                                    {domain.name} ({domain.subjects?.length || 0} subjects)
+                                                    {domain.name}
                                                 </span>
                                             ))}
                                         </div>
                                     </div>
                                 )}
-
-                                <div className="university-meta">
-                                    <span>Created: {new Date(university.created_at).toLocaleDateString()}</span>
-                                </div>
                             </div>
 
                             <div className="university-actions">
-                                <button
-                                    onClick={() => handleEdit(university)}
-                                    className="btn btn-secondary"
-                                >
+                                <button onClick={() => handleEdit(university)} className="btn btn-secondary">
                                     <Edit size={16} />
                                     Edit
                                 </button>
-                                <button
-                                    onClick={() => handleDelete(university.id)}
-                                    className="btn-deny"
-                                >
+                                <button onClick={() => handleDelete(university.id)} className="btn-deny">
                                     <Trash2 size={16} />
                                     Delete
                                 </button>
@@ -288,7 +198,7 @@ const UniversitiesTab = () => {
                     </div>
                 ))}
 
-                {filteredUniversities.length === 0 && (
+                {filtered.length === 0 && (
                     <div className="empty-resource-state">
                         <div className="empty-resource-icon">
                             <Building size={64} />

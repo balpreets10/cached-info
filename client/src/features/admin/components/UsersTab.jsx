@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../supabaseClient';
+import { useAdminUsers, useSetUserRoles } from '../hooks/useAdmin';
+import { ROLES } from '../../../shared/lib/permissions';
 import {
-    Plus,
     Search,
-    Edit,
-    Trash2,
     Shield,
     User,
     Check,
@@ -12,139 +10,32 @@ import {
     Crown
 } from 'lucide-react';
 
+/**
+ * User + role management. Reads GET /api/admin/users and replaces a user's roles
+ * via PUT /api/admin/users/:id/roles. Roles are 'student' / 'management'
+ * (no separate auth.users delete — that endpoint doesn't exist server-side).
+ */
 const UsersTab = () => {
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { data: users = [], isLoading, error: loadError } = useAdminUsers();
+    const setUserRoles = useSetUserRoles();
+
     const [searchTerm, setSearchTerm] = useState('');
     const [editingUser, setEditingUser] = useState(null);
-    const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-
-    useEffect(() => {
-        fetchUsers();
-    }, []);
-
-    const fetchUsers = async () => {
-        try {
-            // First try to get users from user_profiles
-            const { data: profilesData, error: profilesError } = await supabase
-                .from('user_profiles')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (profilesError) {
-                console.error('Error fetching user profiles:', profilesError);
-
-                // If there's an RLS issue, try to get users from auth.users (requires proper permissions)
-                // This might not work if RLS is blocking it, but it's worth trying
-                const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-
-                if (authError) {
-                    throw new Error('Unable to fetch users. This might be due to database permissions. Please ensure the admin user has proper access rights.');
-                }
-
-                // If we got auth users but no profiles, create basic profile data
-                const usersWithProfiles = authData.users.map(user => ({
-                    id: user.id,
-                    full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Unknown User',
-                    role: user.user_metadata?.role || 'user',
-                    created_at: user.created_at,
-                    updated_at: user.updated_at || user.created_at,
-                    email: user.email
-                }));
-
-                setUsers(usersWithProfiles);
-            } else {
-                // Successfully got user profiles
-                setUsers(profilesData || []);
-            }
-        } catch (err) {
-            const errorMessage = err.message || 'Failed to fetch users';
-            setError(errorMessage);
-            console.error('Error in fetchUsers:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const [error, setError] = useState(null);
 
     const handleRoleUpdate = async (userId, newRole) => {
         try {
-            const { error } = await supabase
-                .from('user_profiles')
-                .update({
-                    role: newRole,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', userId);
-
-            if (error) {
-                // If update fails, try to insert the profile if it doesn't exist
-                if (error.code === 'PGRST116') { // No rows updated
-                    const userToUpdate = users.find(u => u.id === userId);
-                    const { error: insertError } = await supabase
-                        .from('user_profiles')
-                        .insert({
-                            id: userId,
-                            full_name: userToUpdate?.full_name || userToUpdate?.email?.split('@')[0] || 'Unknown User',
-                            role: newRole,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-
-                    if (insertError) throw insertError;
-                } else {
-                    throw error;
-                }
-            }
-
+            // Management inherits student capabilities server-side, so a single
+            // role per user is sufficient here.
+            await setUserRoles.mutateAsync({ userId, roles: [newRole] });
             setSuccess(`User role updated to ${newRole}`);
             setEditingUser(null);
-            fetchUsers();
         } catch (err) {
-            setError('Failed to update user role');
-            console.error('Error updating role:', err);
+            setError(err?.response?.data?.error?.message || 'Failed to update user role');
         }
     };
 
-    const handleDeleteUser = async (userId) => {
-        if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-            return;
-        }
-
-        try {
-            // First delete the user profile
-            const { error: profileError } = await supabase
-                .from('user_profiles')
-                .delete()
-                .eq('id', userId);
-
-            if (profileError && profileError.code !== 'PGRST116') {
-                throw profileError;
-            }
-
-            // Note: Deleting from auth.users requires admin privileges
-            // This might not work depending on your setup
-            try {
-                const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-                if (authError) {
-                    console.warn('Could not delete user from auth system:', authError);
-                    setSuccess('User profile deleted (auth user may still exist)');
-                } else {
-                    setSuccess('User deleted successfully');
-                }
-            } catch (authErr) {
-                console.warn('Auth deletion not available:', authErr);
-                setSuccess('User profile deleted (auth user may still exist)');
-            }
-
-            fetchUsers();
-        } catch (err) {
-            setError('Failed to delete user');
-            console.error('Error deleting user:', err);
-        }
-    };
-
-    // Clear notifications after 5 seconds
     useEffect(() => {
         if (success || error) {
             const timer = setTimeout(() => {
@@ -155,14 +46,17 @@ const UsersTab = () => {
         }
     }, [success, error]);
 
-    const filteredUsers = users.filter(user =>
+    const isManagement = (user) => (user.roles || []).includes(ROLES.MANAGEMENT);
+    const primaryRole = (user) => (isManagement(user) ? ROLES.MANAGEMENT : ROLES.STUDENT);
+
+    const filteredUsers = users.filter((user) =>
         !searchTerm ||
-        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.id.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="loading-container">
                 <div className="loading-spinner"></div>
@@ -171,14 +65,22 @@ const UsersTab = () => {
         );
     }
 
+    if (loadError) {
+        return (
+            <div className="notification error">
+                <X size={16} />
+                Failed to load users.
+            </div>
+        );
+    }
+
     return (
         <div className="users-tab">
-            {/* Header */}
             <div className="users-header">
                 <div className="users-header-content">
                     <div className="users-header-text">
                         <h2>User Management</h2>
-                        <p>Manage user accounts and permissions ({users.length} total users)</p>
+                        <p>Manage user roles ({users.length} total users)</p>
                     </div>
                     <div className="search-container">
                         <Search size={20} className="search-icon" />
@@ -193,7 +95,6 @@ const UsersTab = () => {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
             {success && (
                 <div className="notification success">
                     <Check size={16} />
@@ -207,7 +108,6 @@ const UsersTab = () => {
                 </div>
             )}
 
-            {/* Users Table */}
             <div className="users-table-container">
                 <div className="users-table-wrapper">
                     <table className="users-table">
@@ -215,8 +115,7 @@ const UsersTab = () => {
                             <tr>
                                 <th>User</th>
                                 <th>Role</th>
-                                <th>Join Date</th>
-                                <th>Last Updated</th>
+                                <th>Last Login</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -226,13 +125,13 @@ const UsersTab = () => {
                                     <td>
                                         <div className="user-cell">
                                             <div className="user-table-avatar">
-                                                {(user.full_name || user.email || user.id || 'A').charAt(0).toUpperCase()}
+                                                {(user.fullName || user.email || 'A').charAt(0).toUpperCase()}
                                             </div>
                                             <div className="user-info">
                                                 <p className="user-name">
-                                                    {user.full_name || user.email?.split('@')[0] || 'No name provided'}
+                                                    {user.fullName || user.email?.split('@')[0] || 'No name'}
                                                 </p>
-                                                <p className="user-id">{user.email || user.id}</p>
+                                                <p className="user-id">{user.email}</p>
                                             </div>
                                         </div>
                                     </td>
@@ -240,12 +139,12 @@ const UsersTab = () => {
                                         {editingUser === user.id ? (
                                             <div className="role-edit-controls">
                                                 <select
-                                                    value={user.role || 'user'}
+                                                    value={primaryRole(user)}
                                                     onChange={(e) => handleRoleUpdate(user.id, e.target.value)}
                                                     className="role-select"
                                                 >
-                                                    <option value="user">User</option>
-                                                    <option value="admin">Admin</option>
+                                                    <option value={ROLES.STUDENT}>Student</option>
+                                                    <option value={ROLES.MANAGEMENT}>Management</option>
                                                 </select>
                                                 <button
                                                     onClick={() => setEditingUser(null)}
@@ -256,16 +155,16 @@ const UsersTab = () => {
                                             </div>
                                         ) : (
                                             <div className="role-display">
-                                                <span className={`role-badge ${user.role || 'user'}`}>
-                                                    {user.role === 'admin' ? (
+                                                <span className={`role-badge ${primaryRole(user)}`}>
+                                                    {isManagement(user) ? (
                                                         <>
                                                             <Crown size={12} />
-                                                            Admin
+                                                            Management
                                                         </>
                                                     ) : (
                                                         <>
                                                             <User size={12} />
-                                                            User
+                                                            Student
                                                         </>
                                                     )}
                                                 </span>
@@ -274,12 +173,7 @@ const UsersTab = () => {
                                     </td>
                                     <td>
                                         <span className="user-date">
-                                            {new Date(user.created_at).toLocaleDateString()}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span className="user-date">
-                                            {user.updated_at ? new Date(user.updated_at).toLocaleDateString() : 'Never'}
+                                            {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
                                         </span>
                                     </td>
                                     <td>
@@ -290,13 +184,6 @@ const UsersTab = () => {
                                                 title="Edit role"
                                             >
                                                 <Shield size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteUser(user.id)}
-                                                className="user-action-btn delete"
-                                                title="Delete user"
-                                            >
-                                                <Trash2 size={16} />
                                             </button>
                                         </div>
                                     </td>

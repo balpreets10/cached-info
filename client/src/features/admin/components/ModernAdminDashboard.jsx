@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../../supabaseClient';
 import { useAuth } from '../../auth/AuthContext';
 import { PERMISSIONS } from '../../../shared/lib/permissions';
+import {
+    usePendingResources,
+    useSetResourceApproval,
+    useAdminUsers,
+} from '../hooks/useAdmin';
+import { useResources } from '../../resources/hooks/useResources';
+import { useUniversitiesTree } from '../../catalog/hooks/useCatalog';
 import './ModernAdminDashboard.css';
 import {
     LayoutDashboard,
@@ -30,199 +36,51 @@ import UsersTab from './UsersTab';
 
 const ModernAdminDashboard = () => {
     const { user, hasPermission } = useAuth();
-    const isAdmin = () => hasPermission(PERMISSIONS.CATALOG_MANAGE);
+    const isAdmin = hasPermission(PERMISSIONS.CATALOG_MANAGE);
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('dashboard');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
-    // Data states
-    const [pendingResources, setPendingResources] = useState([]);
-    const [stats, setStats] = useState({
-        totalResources: 0,
-        pendingResources: 0,
-        totalUsers: 0,
-        totalUniversities: 0
-    });
+    // --- Server state via React Query -----------------------------------------
+    const { data: pendingResult, isLoading: pendingLoading } = usePendingResources();
+    const pendingResources = pendingResult?.data ?? [];
 
-    // Fetch current user profile for display name
-    const fetchCurrentUserProfile = async () => {
-        if (!user?.id) return;
+    const { data: approvedResult } = useResources({ limit: 1 });
+    const { data: users = [] } = useAdminUsers();
+    const { data: universities = [] } = useUniversitiesTree();
 
-        try {
-            const { data, error } = await supabase
-                .from('user_profiles')
-                .select('full_name')
-                .eq('id', user.id)
-                .single();
+    const setApproval = useSetResourceApproval();
 
-            if (!error && data) {
-                setCurrentUserProfile(data);
-            }
-        } catch (err) {
-            console.error('Error fetching user profile:', err);
-        }
+    const stats = {
+        totalResources: approvedResult?.meta?.total ?? 0,
+        pendingResources: pendingResult?.meta?.total ?? pendingResources.length,
+        totalUsers: users.length,
+        totalUniversities: universities.length,
     };
 
-    // Fetch functions
-    const fetchPendingResources = async () => {
-        try {
-            const { data: resources, error: resourcesError } = await supabase
-                .from('resources')
-                .select(`
-                    *,
-                    subjects (
-                        name,
-                        domains (
-                            name,
-                            universities (name)
-                        )
-                    )
-                `)
-                .eq('is_approved', false)
-                .order('created_at', { ascending: false });
-
-            if (resourcesError) throw resourcesError;
-
-            const userIds = [...new Set(resources?.map(r => r.submitted_by).filter(Boolean))];
-            let userProfiles = [];
-
-            if (userIds.length > 0) {
-                const { data: profiles, error: profilesError } = await supabase
-                    .from('user_profiles')
-                    .select('id, full_name')
-                    .in('id', userIds);
-
-                if (!profilesError) {
-                    userProfiles = profiles || [];
-                }
-            }
-
-            const profileMap = {};
-            userProfiles.forEach(profile => {
-                profileMap[profile.id] = profile;
-            });
-
-            const resourcesWithUsers = (resources || []).map(resource => ({
-                ...resource,
-                user_profiles: resource.submitted_by ? profileMap[resource.submitted_by] : null
-            }));
-
-            setPendingResources(resourcesWithUsers);
-            return resourcesWithUsers.length;
-        } catch (err) {
-            console.error('Error fetching pending resources:', err);
-            setError('Failed to fetch pending resources');
-            return 0;
-        }
-    };
-
-    const fetchStats = async () => {
-        try {
-            const [resourcesCount, usersCount, universitiesCount, pendingCount] = await Promise.all([
-                supabase.from('resources').select('*', { count: 'exact', head: true }).eq('is_approved', true),
-                supabase.from('user_profiles').select('*', { count: 'exact', head: true }),
-                supabase.from('universities').select('*', { count: 'exact', head: true }),
-                fetchPendingResources()
-            ]);
-
-            setStats({
-                totalResources: resourcesCount.count || 0,
-                totalUsers: usersCount.count || 0,
-                totalUniversities: universitiesCount.count || 0,
-                pendingResources: pendingCount
-            });
-        } catch (err) {
-            console.error('Error fetching stats:', err);
-        }
-    };
-
-    // Resource approval
+    // Resource approval: approve = isApproved true, deny = isApproved false.
     const handleApprovalStatusChange = async (resourceId, newStatus) => {
         if (newStatus === 'pending') return;
 
-        if (newStatus === 'approved') {
-            try {
-                const { error } = await supabase
-                    .from('resources')
-                    .update({ is_approved: true, updated_at: new Date().toISOString() })
-                    .eq('id', resourceId);
-
-                if (error) throw error;
-
-                setSuccess('Resource approved successfully');
-                fetchPendingResources();
-                fetchStats();
-            } catch (err) {
-                console.error('Error approving resource:', err);
-                setError('Failed to approve resource');
-            }
-        }
-
         if (newStatus === 'denied') {
-            if (!window.confirm('Are you sure you want to deny and delete this resource?')) {
-                return;
-            }
-
-            try {
-                const { error } = await supabase
-                    .from('resources')
-                    .delete()
-                    .eq('id', resourceId);
-
-                if (error) throw error;
-
-                setSuccess('Resource denied and removed');
-                fetchPendingResources();
-                fetchStats();
-            } catch (err) {
-                console.error('Error denying resource:', err);
-                setError('Failed to deny resource');
-            }
+            if (!window.confirm('Reject this submission? It will stay unapproved.')) return;
         }
-    };
 
-    const refreshData = async () => {
-        setLoading(true);
         try {
-            await fetchStats();
+            await setApproval.mutateAsync({
+                id: resourceId,
+                isApproved: newStatus === 'approved',
+            });
+            setSuccess(newStatus === 'approved' ? 'Resource approved' : 'Resource rejected');
         } catch (err) {
-            setError('Failed to refresh data');
-        } finally {
-            setLoading(false);
+            setError(err?.response?.data?.error?.message || 'Failed to update resource');
         }
     };
 
-    // Handle navigation to home
-    const handleReturnToSite = () => {
-        navigate('/');
-    };
-
-    // Load data based on active tab
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            try {
-                if (activeTab === 'dashboard') {
-                    await fetchStats();
-                } else if (activeTab === 'pending-resources') {
-                    await fetchPendingResources();
-                }
-            } catch (err) {
-                setError('Failed to load data');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (isAdmin()) {
-            loadData();
-        }
-    }, [activeTab, isAdmin]);
+    const handleReturnToSite = () => navigate('/');
 
     // Clear notifications
     useEffect(() => {
@@ -235,22 +93,11 @@ const ModernAdminDashboard = () => {
         }
     }, [success, error]);
 
-    // Initialize dashboard
-    useEffect(() => {
-        if (isAdmin()) {
-            fetchStats();
-            fetchCurrentUserProfile();
-        }
-    }, [isAdmin, user]);
-
     // Handle window resize for mobile/desktop detection
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth > 768) {
-                setMobileMenuOpen(false);
-            }
+            if (window.innerWidth > 768) setMobileMenuOpen(false);
         };
-
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
@@ -265,12 +112,11 @@ const ModernAdminDashboard = () => {
                 }
             }
         };
-
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [mobileMenuOpen]);
 
-    if (!isAdmin()) {
+    if (!isAdmin) {
         return (
             <div className="access-denied">
                 <div className="access-denied-card">
@@ -279,11 +125,8 @@ const ModernAdminDashboard = () => {
                     </div>
                     <h2>Access Denied</h2>
                     <p>You don't have permission to access the admin dashboard.</p>
-                    <button
-                        onClick={() => window.close()}
-                        className="access-denied-btn"
-                    >
-                        Close Window
+                    <button onClick={() => navigate('/')} className="access-denied-btn">
+                        Return to Site
                     </button>
                 </div>
             </div>
@@ -309,7 +152,6 @@ const ModernAdminDashboard = () => {
                         pendingResources={pendingResources}
                         handleApprovalStatusChange={handleApprovalStatusChange}
                         setActiveTab={setActiveTab}
-                        onRefresh={refreshData}
                     />
                 );
             case 'pending-resources':
@@ -317,7 +159,7 @@ const ModernAdminDashboard = () => {
                     <PendingResourcesTab
                         pendingResources={pendingResources}
                         handleApprovalStatusChange={handleApprovalStatusChange}
-                        loading={loading}
+                        loading={pendingLoading}
                     />
                 );
             case 'resources':
@@ -368,10 +210,7 @@ const ModernAdminDashboard = () => {
                                 key={item.id}
                                 onClick={() => {
                                     setActiveTab(item.id);
-                                    // Close mobile menu when navigating
-                                    if (window.innerWidth <= 768) {
-                                        setMobileMenuOpen(false);
-                                    }
+                                    if (window.innerWidth <= 768) setMobileMenuOpen(false);
                                 }}
                                 className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
                             >
@@ -388,10 +227,8 @@ const ModernAdminDashboard = () => {
                         );
                     })}
 
-                    {/* Divider */}
                     <div className="nav-divider"></div>
 
-                    {/* Return to Site Item */}
                     <button
                         onClick={handleReturnToSite}
                         className="nav-item nav-item-return"
@@ -406,7 +243,6 @@ const ModernAdminDashboard = () => {
 
             {/* Main Content */}
             <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-                {/* Top Header */}
                 <header className="top-header">
                     <div className="header-content">
                         <div className="header-left">
@@ -424,13 +260,12 @@ const ModernAdminDashboard = () => {
                             </button>
                             <div>
                                 <h2>{menuItems.find(item => item.id === activeTab)?.label || 'Dashboard'}</h2>
-                                <p>Welcome back, {currentUserProfile?.full_name || user?.email}</p>
+                                <p>Welcome back, {user?.fullName || user?.email}</p>
                             </div>
                         </div>
                     </div>
                 </header>
 
-                {/* Notifications */}
                 {success && (
                     <div className="notification success">
                         <Check size={16} />
@@ -445,16 +280,8 @@ const ModernAdminDashboard = () => {
                     </div>
                 )}
 
-                {/* Page Content */}
                 <main className="page-content">
-                    {loading && activeTab === 'dashboard' ? (
-                        <div className="loading-container">
-                            <div className="loading-spinner"></div>
-                            <span className="loading-text">Loading...</span>
-                        </div>
-                    ) : (
-                        renderContent()
-                    )}
+                    {renderContent()}
                 </main>
             </div>
         </div>

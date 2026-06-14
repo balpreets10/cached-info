@@ -1,5 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../supabaseClient';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCatalog } from '../../catalog/hooks/useCatalog';
+import {
+    useCreateCatalogItem,
+    useUpdateCatalogItem,
+    useDeleteCatalogItem,
+} from '../hooks/useAdmin';
 import {
     Plus,
     Search,
@@ -7,141 +12,86 @@ import {
     Trash2,
     BookOpen,
     GraduationCap,
-    Building,
     Check,
     X
 } from 'lucide-react';
 
+const ENTITY = 'subjects';
+
+/** Catalog management for subjects (belongs to a domain). */
 const SubjectsTab = () => {
-    const [subjects, setSubjects] = useState([]);
-    const [domains, setDomains] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { data: subjects = [], isLoading } = useCatalog(ENTITY);
+    const { data: domains = [] } = useCatalog('domains');
+    const createItem = useCreateCatalogItem();
+    const updateItem = useUpdateCatalogItem();
+    const deleteItem = useDeleteCatalogItem();
+
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddForm, setShowAddForm] = useState(false);
-    const [editingSubject, setEditingSubject] = useState(null);
+    const [editing, setEditing] = useState(null);
+    const [formData, setFormData] = useState({ name: '', domain_id: '' });
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    const [formData, setFormData] = useState({
-        name: '',
-        domain_id: ''
-    });
+    const domainNameById = useMemo(() => {
+        const map = {};
+        domains.forEach((d) => { map[d.id] = d.name; });
+        return map;
+    }, [domains]);
 
     useEffect(() => {
-        fetchSubjects();
-        fetchDomains();
-    }, []);
-
-    const fetchSubjects = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('subjects')
-                .select(`
-                    *,
-                    domains (
-                        id,
-                        name,
-                        universities (id, name)
-                    )
-                `)
-                .order('name');
-
-            if (error) throw error;
-            setSubjects(data || []);
-        } catch (err) {
-            setError('Failed to fetch subjects');
-            console.error(err);
-        } finally {
-            setLoading(false);
+        if (success || error) {
+            const timer = setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+            return () => clearTimeout(timer);
         }
-    };
+    }, [success, error]);
 
-    const fetchDomains = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('domains')
-                .select('id, name, universities(name)')
-                .order('name');
-
-            if (error) throw error;
-            setDomains(data || []);
-        } catch (err) {
-            console.error('Error fetching domains:', err);
-        }
+    const closeForm = () => {
+        setShowAddForm(false);
+        setEditing(null);
+        setFormData({ name: '', domain_id: '' });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const body = { name: formData.name.trim(), domain_id: formData.domain_id };
         try {
-            const subjectData = {
-                name: formData.name.trim(),
-                domain_id: formData.domain_id,
-                updated_at: new Date().toISOString()
-            };
-
-            let result;
-            if (editingSubject) {
-                result = await supabase
-                    .from('subjects')
-                    .update(subjectData)
-                    .eq('id', editingSubject.id);
+            if (editing) {
+                await updateItem.mutateAsync({ entity: ENTITY, id: editing.id, body });
+                setSuccess('Subject updated successfully');
             } else {
-                subjectData.created_at = new Date().toISOString();
-                result = await supabase
-                    .from('subjects')
-                    .insert([subjectData]);
+                await createItem.mutateAsync({ entity: ENTITY, body });
+                setSuccess('Subject added successfully');
             }
-
-            if (result.error) throw result.error;
-
-            setSuccess(editingSubject ? 'Subject updated successfully' : 'Subject added successfully');
-            setShowAddForm(false);
-            setEditingSubject(null);
-            setFormData({ name: '', domain_id: '' });
-            fetchSubjects();
+            closeForm();
         } catch (err) {
-            setError('Failed to save subject');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to save subject');
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this subject? This will also delete all associated resources.')) {
-            return;
-        }
-
+        if (!window.confirm('Delete this subject? Associated resources may be affected.')) return;
         try {
-            const { error } = await supabase
-                .from('subjects')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await deleteItem.mutateAsync({ entity: ENTITY, id });
             setSuccess('Subject deleted successfully');
-            fetchSubjects();
         } catch (err) {
-            setError('Failed to delete subject');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to delete subject');
         }
     };
 
     const handleEdit = (subject) => {
-        setEditingSubject(subject);
-        setFormData({
-            name: subject.name,
-            domain_id: subject.domain_id
-        });
+        setEditing(subject);
+        setFormData({ name: subject.name, domain_id: subject.domain_id });
         setShowAddForm(true);
     };
 
-    const filteredSubjects = subjects.filter(subject =>
+    const filtered = subjects.filter((s) =>
         !searchTerm ||
-        subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        subject.domains?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        subject.domains?.universities?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (domainNameById[s.domain_id] || '').toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="loading-container">
                 <div className="loading-spinner"></div>
@@ -152,7 +102,6 @@ const SubjectsTab = () => {
 
     return (
         <div className="subjects-tab">
-            {/* Header */}
             <div className="page-header">
                 <div className="page-header-content">
                     <div className="page-header-text">
@@ -170,10 +119,7 @@ const SubjectsTab = () => {
                                 className="search-input"
                             />
                         </div>
-                        <button
-                            onClick={() => setShowAddForm(true)}
-                            className="btn btn-primary"
-                        >
+                        <button onClick={() => setShowAddForm(true)} className="btn btn-primary">
                             <Plus size={16} />
                             Add Subject
                         </button>
@@ -181,36 +127,15 @@ const SubjectsTab = () => {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
-            {success && (
-                <div className="notification success">
-                    <Check size={16} />
-                    {success}
-                </div>
-            )}
-            {error && (
-                <div className="notification error">
-                    <X size={16} />
-                    {error}
-                </div>
-            )}
+            {success && <div className="notification success"><Check size={16} />{success}</div>}
+            {error && <div className="notification error"><X size={16} />{error}</div>}
 
-            {/* Add/Edit Form Modal */}
             {showAddForm && (
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <div className="modal-header">
-                            <h3>{editingSubject ? 'Edit Subject' : 'Add New Subject'}</h3>
-                            <button
-                                onClick={() => {
-                                    setShowAddForm(false);
-                                    setEditingSubject(null);
-                                    setFormData({ name: '', domain_id: '' });
-                                }}
-                                className="modal-close"
-                            >
-                                <X size={20} />
-                            </button>
+                            <h3>{editing ? 'Edit Subject' : 'Add New Subject'}</h3>
+                            <button onClick={closeForm} className="modal-close"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
@@ -236,27 +161,17 @@ const SubjectsTab = () => {
                                     className="form-input"
                                 >
                                     <option value="">Select a domain</option>
-                                    {domains.map(domain => (
-                                        <option key={domain.id} value={domain.id}>
-                                            {domain.name} ({domain.universities?.name})
-                                        </option>
+                                    {domains.map((d) => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="form-actions">
                                 <button type="submit" className="btn btn-primary">
-                                    {editingSubject ? 'Update Subject' : 'Add Subject'}
+                                    {editing ? 'Update Subject' : 'Add Subject'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowAddForm(false);
-                                        setEditingSubject(null);
-                                        setFormData({ name: '', domain_id: '' });
-                                    }}
-                                    className="btn btn-secondary"
-                                >
+                                <button type="button" onClick={closeForm} className="btn btn-secondary">
                                     Cancel
                                 </button>
                             </div>
@@ -265,9 +180,8 @@ const SubjectsTab = () => {
                 </div>
             )}
 
-            {/* Subjects List */}
             <div className="subjects-list">
-                {filteredSubjects.map((subject) => (
+                {filtered.map((subject) => (
                     <div key={subject.id} className="subject-card">
                         <div className="subject-content">
                             <div className="subject-info">
@@ -278,33 +192,19 @@ const SubjectsTab = () => {
                                         <div className="subject-hierarchy">
                                             <div className="hierarchy-item">
                                                 <GraduationCap size={14} />
-                                                <span>{subject.domains?.name}</span>
-                                            </div>
-                                            <div className="hierarchy-item">
-                                                <Building size={14} />
-                                                <span>{subject.domains?.universities?.name}</span>
+                                                <span>{domainNameById[subject.domain_id] || '—'}</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-
-                                <div className="subject-meta">
-                                    <span>Created: {new Date(subject.created_at).toLocaleDateString()}</span>
-                                </div>
                             </div>
 
                             <div className="subject-actions">
-                                <button
-                                    onClick={() => handleEdit(subject)}
-                                    className="btn btn-secondary"
-                                >
+                                <button onClick={() => handleEdit(subject)} className="btn btn-secondary">
                                     <Edit size={16} />
                                     Edit
                                 </button>
-                                <button
-                                    onClick={() => handleDelete(subject.id)}
-                                    className="btn-deny"
-                                >
+                                <button onClick={() => handleDelete(subject.id)} className="btn-deny">
                                     <Trash2 size={16} />
                                     Delete
                                 </button>
@@ -313,7 +213,7 @@ const SubjectsTab = () => {
                     </div>
                 ))}
 
-                {filteredSubjects.length === 0 && (
+                {filtered.length === 0 && (
                     <div className="empty-resource-state">
                         <div className="empty-resource-icon">
                             <BookOpen size={64} />

@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../supabaseClient';
+import { useResources } from '../../resources/hooks/useResources';
+import { useCatalog } from '../../catalog/hooks/useCatalog';
+import {
+    useAdminCreateResource,
+    useAdminUpdateResource,
+    useAdminDeleteResource,
+} from '../hooks/useAdmin';
 import {
     Plus,
     Search,
-    Filter,
     Edit,
     Trash2,
     Eye,
@@ -12,195 +17,99 @@ import {
     Check
 } from 'lucide-react';
 
+const EMPTY = { title: '', description: '', url: '', subject_id: '', skill_id: '', exam_id: '' };
+
+/**
+ * Manage approved resources (create/edit/delete via the management API).
+ * Pending submissions are handled in the Pending Review tab.
+ */
 const ResourcesTab = () => {
-    const [resources, setResources] = useState([]);
-    const [loading, setLoading] = useState(true);
+    // Show a generous page of approved resources for management.
+    const { data: result, isLoading } = useResources({ limit: 100 });
+    const resources = result?.data ?? [];
+
+    const { data: subjects = [] } = useCatalog('subjects');
+    const { data: skills = [] } = useCatalog('skills');
+    const { data: exams = [] } = useCatalog('exams');
+
+    const createResource = useAdminCreateResource();
+    const updateResource = useAdminUpdateResource();
+    const deleteResource = useAdminDeleteResource();
+
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddForm, setShowAddForm] = useState(false);
-    const [editingResource, setEditingResource] = useState(null);
-    const [subjects, setSubjects] = useState([]);
-    const [skills, setSkills] = useState([]);
-    const [exams, setExams] = useState([]);
+    const [editing, setEditing] = useState(null);
+    const [formData, setFormData] = useState(EMPTY);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    const [formData, setFormData] = useState({
-        title: '',
-        description: '',
-        url: '',
-        subject_id: '',
-        skill_id: '',
-        exam_id: ''
-    });
-
     useEffect(() => {
-        fetchResources();
-        fetchSubjects();
-        fetchSkills();
-        fetchExams();
-    }, []);
-
-    const fetchResources = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('resources')
-                .select(`
-                    *,
-                    subjects (
-                        name,
-                        domains (
-                            name,
-                            universities (name)
-                        )
-                    ),
-                    skills (name, skill_categories(name)),
-                    exams (name, exam_categories(name))
-                `)
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            setResources(data || []);
-        } catch (err) {
-            setError('Failed to fetch resources');
-            console.error(err);
-        } finally {
-            setLoading(false);
+        if (success || error) {
+            const timer = setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+            return () => clearTimeout(timer);
         }
-    };
+    }, [success, error]);
 
-    const fetchSubjects = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('subjects')
-                .select('id, name, domains(name, universities(name))')
-                .order('name');
-
-            if (error) throw error;
-            setSubjects(data || []);
-        } catch (err) {
-            console.error('Error fetching subjects:', err);
-        }
-    };
-
-    const fetchSkills = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('skills')
-                .select('id, name, skill_categories(name)')
-                .order('name');
-
-            if (error) throw error;
-            setSkills(data || []);
-        } catch (err) {
-            console.error('Error fetching skills:', err);
-        }
-    };
-
-    const fetchExams = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('exams')
-                .select('id, name, exam_categories(name)')
-                .order('name');
-
-            if (error) throw error;
-            setExams(data || []);
-        } catch (err) {
-            console.error('Error fetching exams:', err);
-        }
+    const closeForm = () => {
+        setShowAddForm(false);
+        setEditing(null);
+        setFormData(EMPTY);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Build the API body with exactly one parent id.
+        const body = { title: formData.title, url: formData.url };
+        if (formData.description) body.description = formData.description;
+        if (formData.subject_id) body.subjectId = formData.subject_id;
+        else if (formData.skill_id) body.skillId = formData.skill_id;
+        else if (formData.exam_id) body.examId = formData.exam_id;
+
         try {
-            const resourceData = {
-                title: formData.title,
-                description: formData.description,
-                url: formData.url,
-                is_approved: true,
-                updated_at: new Date().toISOString()
-            };
-
-            // Add the appropriate foreign key
-            if (formData.subject_id) {
-                resourceData.subject_id = formData.subject_id;
-            } else if (formData.skill_id) {
-                resourceData.skill_id = formData.skill_id;
-            } else if (formData.exam_id) {
-                resourceData.exam_id = formData.exam_id;
-            }
-
-            let result;
-            if (editingResource) {
-                result = await supabase
-                    .from('resources')
-                    .update(resourceData)
-                    .eq('id', editingResource.id);
+            if (editing) {
+                await updateResource.mutateAsync({ id: editing.id, body });
+                setSuccess('Resource updated successfully');
             } else {
-                resourceData.created_at = new Date().toISOString();
-                result = await supabase
-                    .from('resources')
-                    .insert([resourceData]);
+                await createResource.mutateAsync(body);
+                setSuccess('Resource added successfully');
             }
-
-            if (result.error) throw result.error;
-
-            setSuccess(editingResource ? 'Resource updated successfully' : 'Resource added successfully');
-            setShowAddForm(false);
-            setEditingResource(null);
-            setFormData({
-                title: '',
-                description: '',
-                url: '',
-                subject_id: '',
-                skill_id: '',
-                exam_id: ''
-            });
-            fetchResources();
+            closeForm();
         } catch (err) {
-            setError('Failed to save resource');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to save resource');
         }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this resource?')) return;
-
         try {
-            const { error } = await supabase
-                .from('resources')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await deleteResource.mutateAsync(id);
             setSuccess('Resource deleted successfully');
-            fetchResources();
         } catch (err) {
-            setError('Failed to delete resource');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to delete resource');
         }
     };
 
     const handleEdit = (resource) => {
-        setEditingResource(resource);
+        setEditing(resource);
         setFormData({
             title: resource.title,
             description: resource.description || '',
             url: resource.url || '',
-            subject_id: resource.subject_id || '',
-            skill_id: resource.skill_id || '',
-            exam_id: resource.exam_id || ''
+            subject_id: resource.subject?.id || '',
+            skill_id: resource.skill?.id || '',
+            exam_id: resource.exam?.id || '',
         });
         setShowAddForm(true);
     };
 
-    const filteredResources = resources.filter(resource =>
+    const filtered = resources.filter((r) =>
         !searchTerm ||
-        resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        resource.description?.toLowerCase().includes(searchTerm.toLowerCase())
+        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        r.description?.toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="loading-container">
                 <div className="loading-spinner"></div>
@@ -211,7 +120,6 @@ const ResourcesTab = () => {
 
     return (
         <div className="resources-tab">
-            {/* Header */}
             <div className="page-header">
                 <div className="page-header-content">
                     <div className="page-header-text">
@@ -229,14 +137,7 @@ const ResourcesTab = () => {
                                 className="search-input"
                             />
                         </div>
-                        {/* <button className="btn btn-secondary">
-                            <Filter size={16} />
-                            Filter
-                        </button> */}
-                        <button
-                            onClick={() => setShowAddForm(true)}
-                            className="btn btn-primary"
-                        >
+                        <button onClick={() => setShowAddForm(true)} className="btn btn-primary">
                             <Plus size={16} />
                             Add Resource
                         </button>
@@ -244,43 +145,15 @@ const ResourcesTab = () => {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
-            {success && (
-                <div className="notification success">
-                    <Check size={16} />
-                    {success}
-                </div>
-            )}
-            {error && (
-                <div className="notification error">
-                    <X size={16} />
-                    {error}
-                </div>
-            )}
+            {success && <div className="notification success"><Check size={16} />{success}</div>}
+            {error && <div className="notification error"><X size={16} />{error}</div>}
 
-            {/* Add/Edit Form Modal */}
             {showAddForm && (
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <div className="modal-header">
-                            <h3>{editingResource ? 'Edit Resource' : 'Add New Resource'}</h3>
-                            <button
-                                onClick={() => {
-                                    setShowAddForm(false);
-                                    setEditingResource(null);
-                                    setFormData({
-                                        title: '',
-                                        description: '',
-                                        url: '',
-                                        subject_id: '',
-                                        skill_id: '',
-                                        exam_id: ''
-                                    });
-                                }}
-                                className="modal-close"
-                            >
-                                <X size={20} />
-                            </button>
+                            <h3>{editing ? 'Edit Resource' : 'Add New Resource'}</h3>
+                            <button onClick={closeForm} className="modal-close"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
@@ -307,94 +180,67 @@ const ResourcesTab = () => {
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="url">URL</label>
+                                <label htmlFor="url">URL *</label>
                                 <input
                                     type="url"
                                     id="url"
                                     value={formData.url}
                                     onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                                    required
                                     className="form-input"
                                 />
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="subject_id">Subject (optional)</label>
+                                <label htmlFor="subject_id">Subject (pick one category)</label>
                                 <select
                                     id="subject_id"
                                     value={formData.subject_id}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        subject_id: e.target.value,
-                                        skill_id: '',
-                                        exam_id: ''
-                                    })}
+                                    onChange={(e) => setFormData({ ...formData, subject_id: e.target.value, skill_id: '', exam_id: '' })}
                                     className="form-input"
                                 >
                                     <option value="">Select a subject</option>
-                                    {subjects.map(subject => (
-                                        <option key={subject.id} value={subject.id}>
-                                            {subject.name} ({subject.domains?.universities?.name})
-                                        </option>
+                                    {subjects.map((s) => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="skill_id">Skill (optional)</label>
+                                <label htmlFor="skill_id">Skill</label>
                                 <select
                                     id="skill_id"
                                     value={formData.skill_id}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        skill_id: e.target.value,
-                                        subject_id: '',
-                                        exam_id: ''
-                                    })}
+                                    onChange={(e) => setFormData({ ...formData, skill_id: e.target.value, subject_id: '', exam_id: '' })}
                                     className="form-input"
                                 >
                                     <option value="">Select a skill</option>
-                                    {skills.map(skill => (
-                                        <option key={skill.id} value={skill.id}>
-                                            {skill.name} ({skill.skill_categories?.name})
-                                        </option>
+                                    {skills.map((s) => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="form-group">
-                                <label htmlFor="exam_id">Exam (optional)</label>
+                                <label htmlFor="exam_id">Exam</label>
                                 <select
                                     id="exam_id"
                                     value={formData.exam_id}
-                                    onChange={(e) => setFormData({
-                                        ...formData,
-                                        exam_id: e.target.value,
-                                        subject_id: '',
-                                        skill_id: ''
-                                    })}
+                                    onChange={(e) => setFormData({ ...formData, exam_id: e.target.value, subject_id: '', skill_id: '' })}
                                     className="form-input"
                                 >
                                     <option value="">Select an exam</option>
-                                    {exams.map(exam => (
-                                        <option key={exam.id} value={exam.id}>
-                                            {exam.name} ({exam.exam_categories?.name})
-                                        </option>
+                                    {exams.map((ex) => (
+                                        <option key={ex.id} value={ex.id}>{ex.name}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="form-actions">
                                 <button type="submit" className="btn btn-primary">
-                                    {editingResource ? 'Update Resource' : 'Add Resource'}
+                                    {editing ? 'Update Resource' : 'Add Resource'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowAddForm(false);
-                                        setEditingResource(null);
-                                    }}
-                                    className="btn btn-secondary"
-                                >
+                                <button type="button" onClick={closeForm} className="btn btn-secondary">
                                     Cancel
                                 </button>
                             </div>
@@ -403,81 +249,41 @@ const ResourcesTab = () => {
                 </div>
             )}
 
-            {/* Resources List */}
             <div className="resource-list">
-                {filteredResources.map((resource) => (
+                {filtered.map((resource) => (
                     <div key={resource.id} className="resource-card">
                         <div className="resource-content">
                             <div className="resource-info">
                                 <div className="resource-header">
                                     <h3 className="resource-title">{resource.title}</h3>
-                                    <span className={`status-badge ${resource.is_approved ? 'approved' : 'pending'}`}>
-                                        {resource.is_approved ? 'Approved' : 'Pending'}
-                                    </span>
+                                    <span className="status-badge approved">Approved</span>
                                 </div>
                                 <p className="resource-description">
                                     {resource.description || 'No description provided'}
                                 </p>
 
                                 {resource.url && (
-                                    <a
-                                        href={resource.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="resource-link"
-                                    >
+                                    <a href={resource.url} target="_blank" rel="noopener noreferrer" className="resource-link">
                                         <ExternalLink size={16} />
                                         View Resource
                                     </a>
                                 )}
 
                                 <div className="resource-tags">
-                                    {resource.subjects && (
-                                        <>
-                                            <span className="resource-tag subject">
-                                                📚 {resource.subjects.name}
-                                            </span>
-                                            {resource.subjects.domains && (
-                                                <span className="resource-tag domain">
-                                                    🎯 {resource.subjects.domains.name}
-                                                </span>
-                                            )}
-                                            {resource.subjects.domains?.universities && (
-                                                <span className="resource-tag university">
-                                                    🏫 {resource.subjects.domains.universities.name}
-                                                </span>
-                                            )}
-                                        </>
-                                    )}
-                                    {resource.skills && (
-                                        <span className="resource-tag skill">
-                                            💡 {resource.skills.name}
-                                        </span>
-                                    )}
-                                    {resource.exams && (
-                                        <span className="resource-tag exam">
-                                            📝 {resource.exams.name}
-                                        </span>
-                                    )}
-                                </div>
-
-                                <div className="resource-meta">
-                                    <span>Created: {new Date(resource.created_at).toLocaleDateString()}</span>
+                                    {resource.subject && <span className="resource-tag subject">📚 {resource.subject.name}</span>}
+                                    {resource.domain && <span className="resource-tag domain">🎯 {resource.domain.name}</span>}
+                                    {resource.university && <span className="resource-tag university">🏫 {resource.university.name}</span>}
+                                    {resource.skill && <span className="resource-tag skill">💡 {resource.skill.name}</span>}
+                                    {resource.exam && <span className="resource-tag exam">📝 {resource.exam.name}</span>}
                                 </div>
                             </div>
 
                             <div className="resource-actions">
-                                <button
-                                    onClick={() => handleEdit(resource)}
-                                    className="btn btn-secondary"
-                                >
+                                <button onClick={() => handleEdit(resource)} className="btn btn-secondary">
                                     <Edit size={16} />
                                     Edit
                                 </button>
-                                <button
-                                    onClick={() => handleDelete(resource.id)}
-                                    className="btn-deny"
-                                >
+                                <button onClick={() => handleDelete(resource.id)} className="btn-deny">
                                     <Trash2 size={16} />
                                     Delete
                                 </button>
@@ -486,7 +292,7 @@ const ResourcesTab = () => {
                     </div>
                 ))}
 
-                {filteredResources.length === 0 && (
+                {filtered.length === 0 && (
                     <div className="empty-resource-state">
                         <div className="empty-resource-icon">
                             <Eye size={64} />

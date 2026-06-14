@@ -1,5 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../../../supabaseClient';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCatalog, useUniversitiesTree } from '../../catalog/hooks/useCatalog';
+import {
+    useCreateCatalogItem,
+    useUpdateCatalogItem,
+    useDeleteCatalogItem,
+} from '../hooks/useAdmin';
 import {
     Plus,
     Search,
@@ -11,132 +16,83 @@ import {
     X
 } from 'lucide-react';
 
+const ENTITY = 'domains';
+
+/** Catalog management for domains (belongs to a university). */
 const DomainsTab = () => {
-    const [domains, setDomains] = useState([]);
-    const [universities, setUniversities] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { data: domains = [], isLoading } = useCatalog(ENTITY);
+    const { data: universities = [] } = useUniversitiesTree();
+    const createItem = useCreateCatalogItem();
+    const updateItem = useUpdateCatalogItem();
+    const deleteItem = useDeleteCatalogItem();
+
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddForm, setShowAddForm] = useState(false);
-    const [editingDomain, setEditingDomain] = useState(null);
+    const [editing, setEditing] = useState(null);
+    const [formData, setFormData] = useState({ name: '', university_id: '' });
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    const [formData, setFormData] = useState({
-        name: '',
-        university_id: ''
-    });
+    // Map university id → name for display (flat domains list has no join).
+    const uniNameById = useMemo(() => {
+        const map = {};
+        universities.forEach((u) => { map[u.id] = u.name; });
+        return map;
+    }, [universities]);
 
     useEffect(() => {
-        fetchDomains();
-        fetchUniversities();
-    }, []);
-
-    const fetchDomains = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('domains')
-                .select(`
-                    *,
-                    universities (id, name),
-                    subjects (id, name)
-                `)
-                .order('name');
-
-            if (error) throw error;
-            setDomains(data || []);
-        } catch (err) {
-            setError('Failed to fetch domains');
-            console.error(err);
-        } finally {
-            setLoading(false);
+        if (success || error) {
+            const timer = setTimeout(() => { setSuccess(null); setError(null); }, 5000);
+            return () => clearTimeout(timer);
         }
-    };
+    }, [success, error]);
 
-    const fetchUniversities = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('universities')
-                .select('id, name')
-                .order('name');
-
-            if (error) throw error;
-            setUniversities(data || []);
-        } catch (err) {
-            console.error('Error fetching universities:', err);
-        }
+    const closeForm = () => {
+        setShowAddForm(false);
+        setEditing(null);
+        setFormData({ name: '', university_id: '' });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const body = { name: formData.name.trim(), university_id: formData.university_id };
         try {
-            const domainData = {
-                name: formData.name.trim(),
-                university_id: formData.university_id,
-                updated_at: new Date().toISOString()
-            };
-
-            let result;
-            if (editingDomain) {
-                result = await supabase
-                    .from('domains')
-                    .update(domainData)
-                    .eq('id', editingDomain.id);
+            if (editing) {
+                await updateItem.mutateAsync({ entity: ENTITY, id: editing.id, body });
+                setSuccess('Domain updated successfully');
             } else {
-                domainData.created_at = new Date().toISOString();
-                result = await supabase
-                    .from('domains')
-                    .insert([domainData]);
+                await createItem.mutateAsync({ entity: ENTITY, body });
+                setSuccess('Domain added successfully');
             }
-
-            if (result.error) throw result.error;
-
-            setSuccess(editingDomain ? 'Domain updated successfully' : 'Domain added successfully');
-            setShowAddForm(false);
-            setEditingDomain(null);
-            setFormData({ name: '', university_id: '' });
-            fetchDomains();
+            closeForm();
         } catch (err) {
-            setError('Failed to save domain');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to save domain');
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this domain? This will also delete all associated subjects.')) {
-            return;
-        }
-
+        if (!window.confirm('Delete this domain? Associated subjects may be removed too.')) return;
         try {
-            const { error } = await supabase
-                .from('domains')
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
+            await deleteItem.mutateAsync({ entity: ENTITY, id });
             setSuccess('Domain deleted successfully');
-            fetchDomains();
         } catch (err) {
-            setError('Failed to delete domain');
-            console.error(err);
+            setError(err?.response?.data?.error?.message || 'Failed to delete domain');
         }
     };
 
     const handleEdit = (domain) => {
-        setEditingDomain(domain);
-        setFormData({
-            name: domain.name,
-            university_id: domain.university_id
-        });
+        setEditing(domain);
+        setFormData({ name: domain.name, university_id: domain.university_id });
         setShowAddForm(true);
     };
 
-    const filteredDomains = domains.filter(domain =>
+    const filtered = domains.filter((d) =>
         !searchTerm ||
-        domain.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        domain.universities?.name.toLowerCase().includes(searchTerm.toLowerCase())
+        d.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (uniNameById[d.university_id] || '').toLowerCase().includes(searchTerm.toLowerCase()),
     );
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="loading-container">
                 <div className="loading-spinner"></div>
@@ -147,7 +103,6 @@ const DomainsTab = () => {
 
     return (
         <div className="domains-tab">
-            {/* Header */}
             <div className="page-header">
                 <div className="page-header-content">
                     <div className="page-header-text">
@@ -165,10 +120,7 @@ const DomainsTab = () => {
                                 className="search-input"
                             />
                         </div>
-                        <button
-                            onClick={() => setShowAddForm(true)}
-                            className="btn btn-primary"
-                        >
+                        <button onClick={() => setShowAddForm(true)} className="btn btn-primary">
                             <Plus size={16} />
                             Add Domain
                         </button>
@@ -176,36 +128,15 @@ const DomainsTab = () => {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
-            {success && (
-                <div className="notification success">
-                    <Check size={16} />
-                    {success}
-                </div>
-            )}
-            {error && (
-                <div className="notification error">
-                    <X size={16} />
-                    {error}
-                </div>
-            )}
+            {success && <div className="notification success"><Check size={16} />{success}</div>}
+            {error && <div className="notification error"><X size={16} />{error}</div>}
 
-            {/* Add/Edit Form Modal */}
             {showAddForm && (
                 <div className="modal-overlay">
                     <div className="modal-content">
                         <div className="modal-header">
-                            <h3>{editingDomain ? 'Edit Domain' : 'Add New Domain'}</h3>
-                            <button
-                                onClick={() => {
-                                    setShowAddForm(false);
-                                    setEditingDomain(null);
-                                    setFormData({ name: '', university_id: '' });
-                                }}
-                                className="modal-close"
-                            >
-                                <X size={20} />
-                            </button>
+                            <h3>{editing ? 'Edit Domain' : 'Add New Domain'}</h3>
+                            <button onClick={closeForm} className="modal-close"><X size={20} /></button>
                         </div>
                         <form onSubmit={handleSubmit} className="modal-form">
                             <div className="form-group">
@@ -231,27 +162,17 @@ const DomainsTab = () => {
                                     className="form-input"
                                 >
                                     <option value="">Select a university</option>
-                                    {universities.map(university => (
-                                        <option key={university.id} value={university.id}>
-                                            {university.name}
-                                        </option>
+                                    {universities.map((u) => (
+                                        <option key={u.id} value={u.id}>{u.name}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="form-actions">
                                 <button type="submit" className="btn btn-primary">
-                                    {editingDomain ? 'Update Domain' : 'Add Domain'}
+                                    {editing ? 'Update Domain' : 'Add Domain'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowAddForm(false);
-                                        setEditingDomain(null);
-                                        setFormData({ name: '', university_id: '' });
-                                    }}
-                                    className="btn btn-secondary"
-                                >
+                                <button type="button" onClick={closeForm} className="btn btn-secondary">
                                     Cancel
                                 </button>
                             </div>
@@ -260,9 +181,8 @@ const DomainsTab = () => {
                 </div>
             )}
 
-            {/* Domains List */}
             <div className="domains-list">
-                {filteredDomains.map((domain) => (
+                {filtered.map((domain) => (
                     <div key={domain.id} className="domain-card">
                         <div className="domain-content">
                             <div className="domain-info">
@@ -272,48 +192,18 @@ const DomainsTab = () => {
                                         <h3 className="domain-name">{domain.name}</h3>
                                         <div className="domain-university">
                                             <Building size={16} />
-                                            <span>{domain.universities?.name}</span>
+                                            <span>{uniNameById[domain.university_id] || '—'}</span>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div className="domain-stats">
-                                    <div className="stat-item">
-                                        <span className="stat-label">Subjects:</span>
-                                        <span className="stat-value">{domain.subjects?.length || 0}</span>
-                                    </div>
-                                </div>
-
-                                {domain.subjects && domain.subjects.length > 0 && (
-                                    <div className="domain-subjects">
-                                        <h4>Subjects:</h4>
-                                        <div className="subjects-list">
-                                            {domain.subjects.map(subject => (
-                                                <span key={subject.id} className="subject-tag">
-                                                    {subject.name}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="domain-meta">
-                                    <span>Created: {new Date(domain.created_at).toLocaleDateString()}</span>
                                 </div>
                             </div>
 
                             <div className="domain-actions">
-                                <button
-                                    onClick={() => handleEdit(domain)}
-                                    className="btn btn-secondary"
-                                >
+                                <button onClick={() => handleEdit(domain)} className="btn btn-secondary">
                                     <Edit size={16} />
                                     Edit
                                 </button>
-                                <button
-                                    onClick={() => handleDelete(domain.id)}
-                                    className="btn-deny"
-                                >
+                                <button onClick={() => handleDelete(domain.id)} className="btn-deny">
                                     <Trash2 size={16} />
                                     Delete
                                 </button>
@@ -322,7 +212,7 @@ const DomainsTab = () => {
                     </div>
                 ))}
 
-                {filteredDomains.length === 0 && (
+                {filtered.length === 0 && (
                     <div className="empty-resource-state">
                         <div className="empty-resource-icon">
                             <GraduationCap size={64} />

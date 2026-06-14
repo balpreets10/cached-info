@@ -1,38 +1,31 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import axios from 'axios';
 import './ShareableResourceCard.css';
 
 const ShareableResourceCard = ({ resource, onSave, onRemove, isSaved = false }) => {
-  const { user } = useAuth();
-  const [isSharing, setIsSharing] = useState(false);
+  const { isAuthenticated } = useAuth();
   const [shareLink, setShareLink] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const handleSave = async () => {
-    if (!user) {
+  const handleSave = () => {
+    if (!isAuthenticated) {
       alert('Please log in to save resources');
       return;
     }
-
-
+    // Parent owns the save/unsave mutation; both map to a toggle.
+    if (isSaved) {
+      onRemove?.(resource);
+    } else {
+      onSave?.(resource);
+    }
   };
 
-  const generateShareLink = async () => {
-    setIsSharing(true);
-    try {
-      const response = await axios.post('/api/resources/share', {
-        resourceId: resource._id
-      });
-      const link = `${window.location.origin}/resource/${response.data.shareId}`;
-      setShareLink(link);
-      setShowShareModal(true);
-    } catch (error) {
-      console.error('Error generating share link:', error);
-    } finally {
-      setIsSharing(false);
-    }
+  // Share is a client-side deep link to the resource (no backend share table).
+  const generateShareLink = () => {
+    const link = `${window.location.origin}/resources?id=${resource.id}`;
+    setShareLink(link);
+    setShowShareModal(true);
   };
 
   const copyToClipboard = async () => {
@@ -75,7 +68,7 @@ const ShareableResourceCard = ({ resource, onSave, onRemove, isSaved = false }) 
             {resource.type}
           </div>
           <div className="card-actions">
-            {user && (
+            {isAuthenticated && (
               <button
                 className={`save-btn ${isSaved ? 'saved' : ''}`}
                 onClick={handleSave}
@@ -87,10 +80,9 @@ const ShareableResourceCard = ({ resource, onSave, onRemove, isSaved = false }) 
             <button
               className="share-btn"
               onClick={generateShareLink}
-              disabled={isSharing}
               title="Share resource"
             >
-              {isSharing ? '⏳' : '📤'}
+              📤
             </button>
           </div>
         </div>
@@ -117,12 +109,12 @@ const ShareableResourceCard = ({ resource, onSave, onRemove, isSaved = false }) 
             )}
             {resource.skill && (
               <span className="meta-item">
-                💻 {resource.skill}
+                💻 {resource.skill.name}
               </span>
             )}
             {resource.exam && (
               <span className="meta-item">
-                📝 {resource.exam}
+                📝 {resource.exam.name}
               </span>
             )}
           </div>
@@ -136,9 +128,6 @@ const ShareableResourceCard = ({ resource, onSave, onRemove, isSaved = false }) 
             >
               Visit Resource →
             </a>
-            <span className="submitted-by">
-              by {resource.submittedBy?.name || 'Anonymous'}
-            </span>
           </div>
         </div>
       </div>

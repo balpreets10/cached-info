@@ -9,8 +9,7 @@ import {
     Download,
     RefreshCw,
     TrendingUp,
-    Plus,
-    Eye
+    Plus
 } from 'lucide-react';
 
 const DashboardOverview = ({
@@ -112,7 +111,7 @@ const DashboardOverview = ({
                                 <div className="activity-content">
                                     <p className="activity-title">{resource.title}</p>
                                     <p className="activity-subtitle">
-                                        by {resource.user_profiles?.full_name || 'Anonymous'}
+                                        {resource.dateAdded ? new Date(resource.dateAdded).toLocaleDateString() : ''}
                                     </p>
                                 </div>
                                 <div className="activity-actions">
