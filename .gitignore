@@ -33,6 +33,11 @@ server/.env.production
 # database reference (contains a live password — never commit)
 gamingdronzz_cachedinfo.md
 
+# Google OAuth client secret downloaded from Cloud Console — NEVER commit.
+# Put the values in server/.env.development instead.
+client_secret_*.json
+client_secret*.apps.googleusercontent.com.json
+
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
