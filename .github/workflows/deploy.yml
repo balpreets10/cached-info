@@ -1,18 +1,18 @@
-name: 🚀 Deploy cachedinfo.gamingdronzz.com
+name: 🚀 Deploy Cached Info.com
 
 on:
   push:
-    branches: [main, staging]
+    branches: [staging, main]
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Deploy environment'
+        description: 'Deploy Environment'
         required: true
         default: 'staging'
         type: choice
         options:
-          - staging
-          - production
+        - staging
+        - production
       force_deploy:
         description: 'Force full deployment (clean slate)'
         required: false
@@ -20,95 +20,238 @@ on:
         type: boolean
 
 env:
-  APP_DIR: client
-  BUILD_DIR: build
-  PRODUCTION_TARGET: /var/www/cachedinfo.gamingdronzz.com
-  STAGING_TARGET: /var/www/staging.cachedinfo.gamingdronzz.com
+  WORKING_DIRECTORY: './client'
 
 jobs:
-  deploy:
+  prepare:
+    name: 🎯 Prepare Deployment
     runs-on: ubuntu-latest
-    environment:
-      name: ${{ github.event.inputs.environment }}
-    defaults:
-      run:
-        working-directory: ${{ env.APP_DIR }}
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      deploy_staging: ${{ steps.set-env.outputs.deploy_staging }}
+      deploy_production: ${{ steps.set-env.outputs.deploy_production }}
+      force_deploy: ${{ steps.set-env.outputs.force_deploy }}
 
     steps:
-      - name: 📥 Checkout repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🎯 Set deployment environment
+      - name: 🎯 Set Environment
         id: set-env
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             ENV="${{ github.event.inputs.environment }}"
             FORCE="${{ github.event.inputs.force_deploy }}"
-          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            ENV="production"
-            FORCE="false"
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             ENV="staging"
             FORCE="false"
-          else
-            echo "Unsupported branch: $GITHUB_REF"
-            exit 1
-          fi
-
-          TARGET="${{ env.PRODUCTION_TARGET }}"
-          if [[ "$ENV" == "staging" ]]; then
-            TARGET="${{ env.STAGING_TARGET }}"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            ENV="production"
+            FORCE="false"
           fi
 
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "force_deploy=$FORCE" >> $GITHUB_OUTPUT
-          echo "target=$TARGET" >> $GITHUB_OUTPUT
+
+          if [[ "$ENV" == "staging" ]]; then
+            echo "deploy_staging=true" >> $GITHUB_OUTPUT
+            echo "deploy_production=false" >> $GITHUB_OUTPUT
+          else
+            echo "deploy_staging=false" >> $GITHUB_OUTPUT
+            echo "deploy_production=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "🎯 Deploying to: $ENV"
+          echo "🔄 Force deploy: $FORCE"
+
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.deploy_staging == 'true'
+    environment:
+      name: staging
+      url: https://staging.cachedinfo.gamingdronzz.com
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
 
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: '${{ env.APP_DIR }}/package-lock.json'
+          cache-dependency-path: './client/package-lock.json'
 
-      - name: 📦 Install dependencies
+      - name: 📦 Install Dependencies
         run: npm ci
 
-      - name: 🏗️ Build React app
+      - name: 🏗️ Build React (staging)
+        env:
+          # Per-environment build-time vars. Configure these under the GitHub
+          # "staging" Environment (Settings > Environments) as Variables.
+          REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL }}
+          REACT_APP_GOOGLE_CLIENT_ID: ${{ vars.REACT_APP_GOOGLE_CLIENT_ID }}
+          REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
+          REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.REACT_APP_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: 📋 Verify build output
+      - name: 📋 Verify Build Structure
         run: |
-          echo "Build output directory: ${{ env.APP_DIR }}/${{ env.BUILD_DIR }}"
-          ls -la "${{ env.BUILD_DIR }}"
-          echo "Total build files: $(find "${{ env.BUILD_DIR }}" -type f | wc -l)"
+          echo "📂 Build directory contents:"
+          ls -la build/
+          echo "📊 Total build files: $(find build -type f | wc -l)"
 
-      - name: 🧹 Clean target directory when forced
-        if: ${{ steps.set-env.outputs.force_deploy == 'true' }}
+      - name: 🧹 Clean Staging Directory (Full Clean only)
+        if: needs.prepare.outputs.force_deploy == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_SSH_HOST }}
           username: ${{ secrets.DO_SSH_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           script: |
-            rm -rf "${{ steps.set-env.outputs.target }}"/*
-            echo "✅ Cleaned target directory"
+            rm -rf /var/www/staging.cachedinfo.gamingdronzz.com/*
+            echo "✅ Cleaned /var/www/staging.cachedinfo.gamingdronzz.com"
 
-      - name: 🌐 Deploy files via SCP
-        uses: appleboy/scp-action@v0.1.7
+      - name: 🌐 Deploy to Staging via rsync
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          # -a archive, -z compress, --delete removes stale files so the
+          # web root exactly matches the fresh build (no orphaned/partial assets)
+          switches: -avz --delete
+          path: client/build/
+          remote_path: /var/www/staging.cachedinfo.gamingdronzz.com/
+          remote_host: ${{ secrets.DO_SSH_HOST }}
+          remote_user: ${{ secrets.DO_SSH_USER }}
+          remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+
+      - name: ✅ Staging Deployment Success
+        run: |
+          echo "🎉 Successfully deployed to staging!"
+          echo "🌐 Visit: https://staging.cachedinfo.gamingdronzz.com"
+          echo "📅 Deployed at: $(date)"
+          if [[ "${{ needs.prepare.outputs.force_deploy }}" == "true" ]]; then
+            echo "🔄 Full deployment completed"
+          else
+            echo "⚡ Incremental deployment completed"
+          fi
+
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: needs.prepare.outputs.deploy_production == 'true'
+    environment:
+      name: production
+      url: https://cachedinfo.gamingdronzz.com
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './client/package-lock.json'
+
+      - name: 📦 Install Dependencies
+        run: npm ci
+
+      - name: 🏗️ Build React (production)
+        env:
+          # Per-environment build-time vars. Configure these under the GitHub
+          # "production" Environment (Settings > Environments) as Variables.
+          REACT_APP_API_URL: ${{ vars.REACT_APP_API_URL }}
+          REACT_APP_GOOGLE_CLIENT_ID: ${{ vars.REACT_APP_GOOGLE_CLIENT_ID }}
+          REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
+          REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.REACT_APP_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: 📋 Verify Build Structure
+        run: |
+          echo "📂 Build directory contents:"
+          ls -la build/
+          echo "📊 Total build files: $(find build -type f | wc -l)"
+
+      - name: 🧹 Clean Production Directory (Full Clean only)
+        if: needs.prepare.outputs.force_deploy == 'true'
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_SSH_HOST }}
           username: ${{ secrets.DO_SSH_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-          source: "${{ env.APP_DIR }}/${{ env.BUILD_DIR }}/"
-          target: "${{ steps.set-env.outputs.target }}"
-          strip_components: 3
+          script: |
+            rm -rf /var/www/cachedinfo.gamingdronzz.com/*
+            echo "✅ Cleaned /var/www/cachedinfo.gamingdronzz.com"
 
-      - name: ✅ Done
+      - name: 🌐 Deploy to Production via rsync
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          # -a archive, -z compress, --delete removes stale files so the
+          # web root exactly matches the fresh build (no orphaned/partial assets)
+          switches: -avz --delete
+          path: client/build/
+          remote_path: /var/www/cachedinfo.gamingdronzz.com/
+          remote_host: ${{ secrets.DO_SSH_HOST }}
+          remote_user: ${{ secrets.DO_SSH_USER }}
+          remote_key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+
+      - name: ✅ Production Deployment Success
         run: |
-          echo "Deployed to ${{ steps.set-env.outputs.environment }}"
-          if [[ "${{ steps.set-env.outputs.environment }}" == "production" ]]; then
-            echo "URL: https://cachedinfo.gamingdronzz.com"
+          echo "🎉 Successfully deployed to production!"
+          echo "🌐 Visit: https://cachedinfo.gamingdronzz.com"
+          echo "📅 Deployed at: $(date)"
+          if [[ "${{ needs.prepare.outputs.force_deploy }}" == "true" ]]; then
+            echo "🔄 Full deployment completed"
           else
-            echo "URL: https://staging.cachedinfo.gamingdronzz.com"
+            echo "⚡ Incremental deployment completed"
           fi
+
+  notify:
+    name: 📢 Send Notifications
+    runs-on: ubuntu-latest
+    needs: [prepare, deploy-staging, deploy-production]
+    if: always()
+
+    steps:
+      - name: 📱 Notify Success
+        if: needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success'
+        run: |
+          ENV="${{ needs.prepare.outputs.environment }}"
+          FORCE="${{ needs.prepare.outputs.force_deploy }}"
+
+          if [[ "$ENV" == "staging" ]]; then
+            echo "✅ Staging deployment successful!"
+            echo "🌐 Site: https://staging.cachedinfo.gamingdronzz.com"
+          else
+            echo "✅ Production deployment successful!"
+            echo "🌐 Site: https://cachedinfo.gamingdronzz.com"
+          fi
+
+          if [[ "$FORCE" == "true" ]]; then
+            echo "🔄 Full clean deployment completed"
+          else
+            echo "⚡ Incremental deployment completed"
+          fi
+
+      - name: 🚨 Notify Failure
+        if: needs.prepare.result == 'failure' || needs.deploy-staging.result == 'failure' || needs.deploy-production.result == 'failure'
+        run: |
+          echo "❌ Deployment failed!"
+          echo "🔍 Check the logs for details"
+          echo "🔧 Possible issues:"
+          echo "   - SSH credentials incorrect"
+          echo "   - Server connectivity problems"
+          echo "   - File permissions issues"
+          echo "   - Build errors"

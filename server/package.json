@@ -1,0 +1,50 @@
+{
+  "name": "server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend API for cachedinfo.gamingdronzz.com (Express + node-postgres)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "server": "nodemon src/index.js",
+    "start:dev": "cross-env NODE_ENV=development node src/index.js",
+    "start:staging": "cross-env NODE_ENV=staging node src/index.js",
+    "start:prod": "cross-env NODE_ENV=production node src/index.js",
+    "migrate": "node-pg-migrate -m src/db/migrations -j js --envPath .env",
+    "migrate:dev": "cross-env NODE_ENV=development node-pg-migrate -m src/db/migrations -j js",
+    "migrate:create": "node-pg-migrate create -m src/db/migrations -j js",
+    "seed": "node src/db/seed.js",
+    "lint": "eslint src",
+    "test": "cross-env NODE_ENV=test vitest run",
+    "test:watch": "cross-env NODE_ENV=test vitest"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.11.0",
+    "node-pg-migrate": "^8.0.4",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "pg": "^8.13.1",
+    "swagger-jsdoc": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "cross-env": "^7.0.3",
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.8"
+  }
+}
