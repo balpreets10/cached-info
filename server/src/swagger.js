@@ -17,8 +17,12 @@ const spec = swaggerJSDoc({
       version: '0.1.0',
       description: 'Backend API for cachedinfo.gamingdronzz.com (Express + node-postgres).',
     },
+    // Relative server URL so Swagger "Try it out" always calls the same origin
+    // it's served from (localhost in dev, the public domain in staging/prod).
+    // This avoids hardcoding per-env hosts and the CSP/cross-origin breakage
+    // that a literal http://localhost URL causes when docs are viewed over HTTPS.
     servers: [
-      { url: `http://localhost:${config.port}`, description: `local (${config.env})` },
+      { url: '/', description: `same origin (${config.env})` },
     ],
     components: {
       securitySchemes: {
