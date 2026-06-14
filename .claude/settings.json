@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"h:\\\\Media F\\\\Documents\\\\Projects\\\\React\\\\gamingdronzz.com-cachedinfo\\\\server\" -Directory | Where-Object {$_.Name -ne 'node_modules'})",
+      "Bash(npm install *)",
+      "Bash(npx node-pg-migrate *)",
+      "Bash(node -e ' *)",
+      "Bash(cross-env NODE_ENV=development node src/db/seed.js)",
+      "Bash(NODE_ENV=development node src/db/seed.js)",
+      "Bash(npm run *)",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/)",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/api)",
+      "Bash(curl -s -m 5 -o /dev/null -w \"[%{http_code}]\\\\n\" http://localhost:5000/api/docs)",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/health)",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/api/health)",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" \"http://localhost:5000/api/resources?limit=1\")",
+      "Bash(curl -s -m 5 -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/api/catalog/universities/tree)",
+      "Bash(curl -s -m 5 -X POST -w \"\\\\n[%{http_code}]\\\\n\" http://localhost:5000/api/auth/refresh)",
+      "Bash(curl -s -m 5 http://localhost:5000/api/docs.json)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(d\\);console.log\\('swagger paths:',Object.keys\\(j.paths||{}\\).length\\);console.log\\(Object.keys\\(j.paths||{}\\).join\\('\\\\n'\\)\\)}catch\\(e\\){console.log\\('parse err',e.message\\)}}\\)\")"
+    ]
+  }
+}

@@ -17,6 +17,8 @@
     "migrate:create": "node-pg-migrate create -m src/db/migrations -j js",
     "seed": "node src/db/seed.js",
     "seed:dev": "cross-env NODE_ENV=development node src/db/seed.js",
+    "seed:catalog": "node src/db/seed-catalog.js",
+    "seed:catalog:dev": "cross-env NODE_ENV=development node src/db/seed-catalog.js",
     "lint": "eslint src",
     "test": "cross-env NODE_ENV=test vitest run",
     "test:watch": "cross-env NODE_ENV=test vitest"
