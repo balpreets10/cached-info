@@ -47,6 +47,14 @@
     white-space: nowrap;
 }
 
+/* The "Sign In" CTA is a <button> that triggers Google OAuth directly. Reset the
+   UA button defaults so it renders identically to the anchor .nav-link items. */
+button.nav-link {
+    font-family: inherit;
+    line-height: normal;
+    cursor: pointer;
+}
+
 .nav-link:hover {
     background-color: rgba(255, 255, 255, 0.15);
     color: #ffffff;
@@ -66,15 +74,25 @@
     border-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Sign In renders as a solid, high-contrast button so it reads unmistakably as
+   the primary call-to-action against the blue header gradient. */
 .nav-link.auth-link {
-    background-color: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    font-weight: 600;
+    background-color: #ffffff;
+    color: #1e3c72;
+    border: 1px solid #ffffff;
+    font-weight: 700;
+    margin-left: 0.5rem;
 }
 
 .nav-link.auth-link:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.5);
+    background-color: #f1f5f9;
+    color: #1a365d;
+    border-color: #f1f5f9;
+}
+
+.nav-link.auth-link.active {
+    background-color: #f1f5f9;
+    color: #1a365d;
 }
 
 /* User Menu Styles */
@@ -362,9 +380,11 @@
     }
 
     .nav-link.auth-link {
-        background-color: rgba(255, 255, 255, 0.2);
-        border-color: rgba(255, 255, 255, 0.4);
+        background-color: #ffffff;
+        color: #1e3c72;
+        border-color: #ffffff;
         font-weight: 700;
+        margin-left: 0;
     }
 
     /* Mobile User Menu */

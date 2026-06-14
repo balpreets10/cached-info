@@ -12,7 +12,6 @@ import AuthCallback from '../features/auth/AuthCallback';
 import ModernAdminDashboard from '../features/admin/components/ModernAdminDashboard';
 
 // Auth gates
-import ProtectedRoute from '../features/auth/ProtectedRoute';
 import RequirePermission from '../features/auth/RequirePermission';
 import { PERMISSIONS } from '../shared/lib/permissions';
 
@@ -55,22 +54,12 @@ const AppContent = () => {
         <Route path="/our-story" element={<OurStory />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route
-          path="/request"
-          element={
-            <ProtectedRoute>
-              <RequestResource />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/submit"
-          element={
-            <ProtectedRoute>
-              <SubmitResource />
-            </ProtectedRoute>
-          }
-        />
+        {/* Publicly viewable so logged-out users see the form + an inline
+            "Sign in with Google" prompt (SignInPrompt). Submitting still
+            requires auth — the API rejects it and the submit button is
+            disabled until the user signs in. */}
+        <Route path="/request" element={<RequestResource />} />
+        <Route path="/submit" element={<SubmitResource />} />
       </Routes>
     </div>
   );

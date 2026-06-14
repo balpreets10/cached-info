@@ -10,7 +10,7 @@ const Header = () => {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const location = useLocation();
-    const { user, roles, signOut, loading, hasPermission } = useAuth();
+    const { user, roles, signOut, hasPermission, signInWithGoogle } = useAuth();
     // Express user shape: { id, email, fullName, avatarUrl }. The old code also
     // referenced a separate userProfile (Supabase) — they're unified now.
     const isAdmin = () => hasPermission(PERMISSIONS.CATALOG_MANAGE);
@@ -205,10 +205,11 @@ const Header = () => {
                     Our Story
                 </Link>
 
-                {/* Authentication Section */}
-                {!loading && (
-                    <>
-                        {user ? (
+                {/* Authentication Section.
+                    The Sign In control must never be hidden while auth is still
+                    resolving (or if the backend is down) — only the logged-in user
+                    menu waits for `user` to hydrate. */}
+                {user ? (
                             // User is logged in - show user menu
                             <div className="user-menu-container">
                                 <button
@@ -273,17 +274,18 @@ const Header = () => {
                                 )}
                             </div>
                         ) : (
-                            // User is not logged in - show sign in link
-                            <Link
-                                to="/signin"
-                                className={`nav-link auth-link ${isActive('/signin') ? 'active' : ''}`}
-                                onClick={closeMenu}
+                            // User is not logged in - go straight to Google OAuth
+                            <button
+                                type="button"
+                                className="nav-link auth-link"
+                                onClick={() => {
+                                    closeMenu();
+                                    signInWithGoogle();
+                                }}
                             >
                                 Sign In
-                            </Link>
+                            </button>
                         )}
-                    </>
-                )}
             </nav>
         </header>
     );

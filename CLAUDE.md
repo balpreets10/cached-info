@@ -99,10 +99,21 @@ auth (Passport Google + JWT + RBAC), and the full catalog/resources/search/me/ad
 - Swap all `DataContext` Supabase queries for React Query hooks over the API, then
   delete `client/src/supabaseClient.js` and remove `@supabase/supabase-js`.
 - Run the one-off `server/scripts/migrate-from-supabase.js` during cutover (take a PG
-  dump first). Then **Phase 7**: server deployment automation + final docs.
+  dump first).
+
+**Phase 7 (server CI/CD) — implemented in the workflow, not yet rolled out:**
+`.github/workflows/deploy.yml` now has `deploy-server-{staging,production}` jobs that
+rsync `server/`, write a root-owned `/etc/cinfo/api-<env>.env` from GitHub Environment
+secrets/vars, run `npm run migrate`, and (re)start the API under **PM2**
+(`deploy/ecosystem.config.cjs`; prod :5000, staging :5001), then smoke-check
+`/api/health`. Secrets are configured in GitHub, never hand-placed on the droplet.
+Still to do before it works live: apply the per-env GitHub secrets/vars, do the
+one-time droplet prep (PM2 + nginx `/api/*` proxy + scoped sudo) per `deploy/README.md`,
+and verify a real staging→prod deploy.
 
 The full plan with file-level detail lives at
-`C:\Users\Balpreet\.claude\plans\i-want-to-prepare-vivid-lovelace.md`.
+`C:\Users\Balpreet\.claude\plans\i-want-to-prepare-vivid-lovelace.md`; the server-deploy
+plan is at `Plans/github-secrets-server-deploy.md`.
 
 ## Notable gotchas
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import SignInPrompt from '../auth/components/SignInPrompt';
 import { useUniversitiesTree, useCatalog } from '../catalog/hooks/useCatalog';
 import { useSubmitResource } from './hooks/useResources';
 import './SubmitResource.css';
@@ -191,11 +192,7 @@ const SubmitResource = () => {
           <p>Share valuable learning resources with the community</p>
         </div>
 
-        {!isAuthenticated && (
-          <div className="auth-warning">
-            <p>⚠️ Please login to submit resources</p>
-          </div>
-        )}
+        <SignInPrompt message="Sign in with Google to submit a resource." />
 
         {submitStatus === 'success' && (
           <div className="success-alert">
