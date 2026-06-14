@@ -65,7 +65,7 @@ jobs:
           echo "🔄 Force deploy: $FORCE"
 
   deploy-staging:
-    name: 🚀 Deploy to Staging
+    name: 🚀 Deploy Client to Staging
     runs-on: ubuntu-latest
     needs: prepare
     if: needs.prepare.outputs.deploy_staging == 'true'
@@ -142,7 +142,7 @@ jobs:
           fi
 
   deploy-production:
-    name: 🚀 Deploy to Production
+    name: 🚀 Deploy Client to Production
     runs-on: ubuntu-latest
     needs: prepare
     if: needs.prepare.outputs.deploy_production == 'true'
@@ -304,6 +304,14 @@ jobs:
             set -a; sudo cat "$ENV_FILE" > /tmp/cinfo-staging.env && . /tmp/cinfo-staging.env && rm -f /tmp/cinfo-staging.env; set +a
             npm run migrate
 
+            # 3b. Seed RBAC roles/permissions/grants (+ bootstrap admin role if
+            #     that user has signed in). Idempotent — safe on every deploy.
+            npm run seed
+
+            # 3c. Seed demo catalog + resources. Idempotent (catalog upserts;
+            #     resources are owned by a seed user and replaced each run).
+            npm run seed:catalog
+
             # 4. (Re)start the API under PM2. The ecosystem config reads the same
             #    env file, so --update-env picks up the latest secrets.
             cd "$APP_DIR"
@@ -391,6 +399,14 @@ jobs:
 
             set -a; sudo cat "$ENV_FILE" > /tmp/cinfo-production.env && . /tmp/cinfo-production.env && rm -f /tmp/cinfo-production.env; set +a
             npm run migrate
+
+            # Seed RBAC roles/permissions/grants (+ bootstrap admin role if that
+            # user has signed in). Idempotent — safe on every deploy.
+            npm run seed
+
+            # Seed demo catalog + resources. Idempotent (catalog upserts;
+            # resources are owned by a seed user and replaced each run).
+            npm run seed:catalog
 
             cd "$APP_DIR"
             pm2 startOrReload deploy/ecosystem.config.cjs --only cinfo-api-production --update-env
