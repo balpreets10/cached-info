@@ -89,7 +89,7 @@ jobs:
           cache-dependency-path: './client/package-lock.json'
 
       - name: 📦 Install Dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: 🏗️ Build React (staging)
         env:
@@ -173,7 +173,7 @@ jobs:
           cache-dependency-path: './client/package-lock.json'
 
       - name: 📦 Install Dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
 
       - name: 🏗️ Build React (production)
         env:
@@ -310,7 +310,7 @@ jobs:
 
             # 2. Install prod deps.
             cd "$APP_DIR/server"
-            npm ci --omit=dev
+            npm ci --omit=dev --no-audit --no-fund
 
             # 3. Run migrations with DATABASE_URL in the env (node-pg-migrate
             #    reads it from process env). Read it back from the file we just
@@ -409,7 +409,7 @@ jobs:
             EOF
 
             cd "$APP_DIR/server"
-            npm ci --omit=dev
+            npm ci --omit=dev --no-audit --no-fund
 
             set -a; sudo cat "$ENV_FILE" > /tmp/cinfo-production.env && . /tmp/cinfo-production.env && rm -f /tmp/cinfo-production.env; set +a
             npm run migrate
