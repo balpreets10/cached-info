@@ -99,7 +99,14 @@ jobs:
           REACT_APP_GOOGLE_CLIENT_ID: ${{ vars.REACT_APP_GOOGLE_CLIENT_ID }}
           REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
           REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.REACT_APP_SUPABASE_ANON_KEY }}
-        run: npm run build
+        run: |
+          # CRA inlines REACT_APP_* at build time; an empty var silently falls
+          # back to http://localhost:5000 and ships a broken bundle. Fail loudly.
+          if [[ -z "${REACT_APP_API_URL}" ]]; then
+            echo "::error::REACT_APP_API_URL is unset for the staging environment. Set it under Settings > Environments > staging."
+            exit 1
+          fi
+          npm run build
 
       - name: 📋 Verify Build Structure
         run: |
@@ -176,7 +183,14 @@ jobs:
           REACT_APP_GOOGLE_CLIENT_ID: ${{ vars.REACT_APP_GOOGLE_CLIENT_ID }}
           REACT_APP_SUPABASE_URL: ${{ vars.REACT_APP_SUPABASE_URL }}
           REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.REACT_APP_SUPABASE_ANON_KEY }}
-        run: npm run build
+        run: |
+          # CRA inlines REACT_APP_* at build time; an empty var silently falls
+          # back to http://localhost:5000 and ships a broken bundle. Fail loudly.
+          if [[ -z "${REACT_APP_API_URL}" ]]; then
+            echo "::error::REACT_APP_API_URL is unset for the production environment. Set it under Settings > Environments > production."
+            exit 1
+          fi
+          npm run build
 
       - name: 📋 Verify Build Structure
         run: |
